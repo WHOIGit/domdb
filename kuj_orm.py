@@ -1,24 +1,18 @@
 import os
 import csv
+import json
 
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric, func, and_
 from sqlalchemy.orm import sessionmaker, relationship, backref, aliased
+from sqlalchemy.types import PickleType
+
+# JSON serialization
+class TextPickleType(PickleType):
+    impl = String
 
 Base = declarative_base()
-
-"""create table mtab (
- mtab_id text primary key,
- mz numeric,
- mz_min numeric,
- mz_max numeric,
- rt numeric,
- rt_min numeric,
- rt_max numeric
-);
-create index on mtab (mz);
-create index on mtab (rt);"""
 
 class Metabolite(Base):
     __tablename__ = 'metabolite'
@@ -31,29 +25,10 @@ class Metabolite(Base):
     rt = Column(Numeric) # retention time (seconds)
     rtmin = Column(Numeric)
     rtmax = Column(Numeric)
+    rest = Column(TextPickleType(pickler=json))
 
     def __repr__(self):
-        return '<Metabolite %s %s %s>' % (self.experiment, str(self.mz), str(self.rt))
-
-"""create table mtab_df (
- mtab_id text,
- df_id text,
- intensity numeric
-);
-create index on mtab_df (mtab_id);
-create index on mtab_df (df_id);"""
-
-"""create table df (
- df_id text primary key,
- exp_id text,
- metadata_etc text
-);
-create index on df (exp_id);
-
-create table exp (
- exp_id text primary key,
- metadata_etc text
-);"""
+        return '<Metabolite %s %s %s %s>' % (self.experiment, str(self.mz), str(self.rt), json.dumps(self.rest, sort_keys=True, indent=2))
 
 def get_sqlite_engine(delete=True):
     # first, toast db
@@ -66,15 +41,21 @@ def get_sqlite_engine(delete=True):
             raise
     return sqlalchemy.create_engine('sqlite:///%s' % DB_FILE)
 
+COMMON_FIELDS=set(['mz','mzmin','mzmax','rt','rtmin','rtmax'])
+
 def etl(session, exp_name, path):
     with open(path) as cf:
         r = csv.DictReader(cf)
         for d in r:
             # subset the fields
-            d = dict((k,d[k]) for k in ['mz','mzmin','mzmax','rt','rtmin','rtmax'])
-            d['experiment'] = exp_name
+            keys = set(d.keys())
+            rest_keys = keys.difference(COMMON_FIELDS)
+            md = dict((k,d[k]) for k in COMMON_FIELDS)
+            md['experiment'] = exp_name
+            rest = dict((k,d[k]) for k in rest_keys if k)
+            md['rest'] = rest
             # construct orm object
-            m = Metabolite(**d)
+            m = Metabolite(**md)
             # add to session
             session.add(m)
     session.commit()
