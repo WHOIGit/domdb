@@ -8,10 +8,6 @@ from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, F
 from sqlalchemy.orm import sessionmaker, relationship, backref, aliased
 from sqlalchemy.types import PickleType
 
-# JSON serialization
-class TextPickleType(PickleType):
-    impl = String
-
 Base = declarative_base()
 
 class Exp(Base):
@@ -31,12 +27,41 @@ class Mtab(Base):
     rt = Column(Numeric) # retention time (seconds)
     rtmin = Column(Numeric)
     rtmax = Column(Numeric)
-    rest = Column(TextPickleType(pickler=json))
 
     exp = relationship(Exp)
 
     def __repr__(self):
-        return '<Metabolite %s %s %s %s>' % (self.exp.name, str(self.mz), str(self.rt), json.dumps(self.rest, sort_keys=True, indent=2))
+        return '<Metabolite %s %s %s>' % (self.exp.name, str(self.mz), str(self.rt))
+
+class Sample(Base):
+    __tablename__ = 'sample'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    exp_id = Column(Integer, ForeignKey('experiment.id'))
+
+    exp = relationship(Exp, backref=backref('samples', cascade='all,delete-orphan'))
+
+class SampleAttr(Base):
+    __tablename__ = 'sample_attr'
+
+    id = Column(Integer, primary_key=True)
+    sample_id = Column(Integer, ForeignKey('sample.id'))
+    name = Column(String)
+    value = Column(String)
+
+    sample = relationship(Sample, backref=backref('attrs', cascade='all,delete-orphan'))
+
+class MtabIntensity(Base):
+    __tablename__ = 'intensity'
+
+    id = Column(Integer, primary_key=True)
+    sample_id = Column(Integer, ForeignKey('sample.id'))
+    mtab_id = Column(Integer, ForeignKey('metabolite.id'))
+    intensity = Column(Numeric)
+
+    sample = relationship(Sample)
+    mtab = relationship(Mtab)
 
 def get_sqlite_engine(delete=True):
     # first, toast db
@@ -51,39 +76,53 @@ def get_sqlite_engine(delete=True):
 
 COMMON_FIELDS=set(['mz','mzmin','mzmax','rt','rtmin','rtmax'])
 
-def etl(session, exp_name, path):
+def etl(session, exp_name, df_path, mdf_path):
     exp = session.query(Exp).filter(Exp.name==exp_name).first()
     if exp is None:
-        print 'Creating experiment %s...' % exp_name
         exp = Exp(name=exp_name)
         session.add(exp)
-        session.commit()
-        print 'Created %s, adding data ...' % exp_name
-    else:
-        print 'Warning: experiment %s already exists, appending data to it' % exp_name
-    with open(path) as cf:
-        r = csv.DictReader(cf)
-        for d in r:
+    # first, do sample metadata for this experiment
+    samples = {}
+    with open(mdf_path) as cf:
+        for d in csv.DictReader(cf):
+            name = d['File.Name']
+            sample = Sample(name=name)
+            samples[name] = sample
+            sample.exp = exp
+            session.add(sample)
+    with open(df_path) as cf:
+        for d in csv.DictReader(cf):
             # subset the fields
             keys = set(d.keys())
             rest_keys = keys.difference(COMMON_FIELDS)
             md = dict((k,d[k]) for k in COMMON_FIELDS)
             md['exp'] = exp
-            rest = dict((k,d[k]) for k in rest_keys if k)
-            md['rest'] = rest
-            # construct orm object
+            # construct ORM object for metabolite
             m = Mtab(**md)
+            # now record mtab intensity per sample
+            rest = dict((k,d[k]) for k in rest_keys if k)
+            for cn,s in rest.items():
+                if cn in samples:
+                    if s != '0':
+                        print cn,s
+                        session.add(MtabIntensity(sample=samples[cn], intensity=s))
             # add to session
             session.add(m)
     session.commit()
 
 def etl_all(session):
-    exp_file = {
+    exp_data = {
         'tps4': 'data/Tps4_pos_2014.05.23.csv',
         'tps6': 'data/Tps6_pos_2014.05.23.csv'
     }
-    for e,f in exp_file.items():
-        etl(session, e, f)
+    exp_metadata = {
+        'tps4': 'metadata/Tps4_metadata.csv',
+        'tps6': 'metadata/Tps6_metadata.csv'
+    }
+    for e in exp_data.keys():
+        data = exp_data[e]
+        metadata = exp_metadata[e]
+        etl(session, e, data, metadata)
     # now commit
     session.commit()
 
@@ -121,19 +160,22 @@ def mtab_search(session,mz,rt,ppm_diff=0.5,rt_diff=30):
 def mtab_random(session):
     return session.query(Mtab).order_by(func.random()).limit(1)[0]
 
+DELETE=False
+
 if __name__=='__main__':
-    engine = get_sqlite_engine()
+    engine = get_sqlite_engine(delete=DELETE)
     Base.metadata.create_all(engine)
     Session = sessionmaker()
     Session.configure(bind=engine)
     session = Session()
-    print 'Loading data...'
-    etl_all(session)
+    if DELETE: # we deleted data, now need to load it
+        print 'Loading data...'
+        etl_all(session)
     # now count how many entries we have
     n = session.query(func.count(Mtab.id)).first()[0]
     print '%d metabolites loaded' % n
     # now pick four metabolites at random
-    for m in session.query(Mtab).order_by(func.random()).limit(4):
+    for m in session.query(Mtab).order_by(func.random()).limit(10):
         print 'Looking for matches for %s' % m
         # for each one, find matching ones
         for match in match_one(session,m):
