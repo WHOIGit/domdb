@@ -18,7 +18,7 @@ class Mtab(Base):
     __tablename__ = 'metabolite'
 
     id = Column(Integer, primary_key=True)
-    experiment = Column(String) # experiment name
+    exp_name = Column(String) # experiment name
     mz = Column(Numeric) # mass-to-charge ratio
     mzmin = Column(Numeric)
     mzmax = Column(Numeric)
@@ -28,7 +28,12 @@ class Mtab(Base):
     rest = Column(TextPickleType(pickler=json))
 
     def __repr__(self):
-        return '<Metabolite %s %s %s %s>' % (self.experiment, str(self.mz), str(self.rt), json.dumps(self.rest, sort_keys=True, indent=2))
+        return '<Metabolite %s %s %s %s>' % (self.exp_name, str(self.mz), str(self.rt), json.dumps(self.rest, sort_keys=True, indent=2))
+
+def ExpAttrs(Base):
+    ___tablename__ == 'exp_attrs'
+
+    id = Column(Integer, primary_key=True)
 
 def get_sqlite_engine(delete=True):
     # first, toast db
@@ -51,7 +56,7 @@ def etl(session, exp_name, path):
             keys = set(d.keys())
             rest_keys = keys.difference(COMMON_FIELDS)
             md = dict((k,d[k]) for k in COMMON_FIELDS)
-            md['experiment'] = exp_name
+            md['exp_name'] = exp_name
             rest = dict((k,d[k]) for k in rest_keys if k)
             md['rest'] = rest
             # construct orm object
@@ -73,11 +78,11 @@ def etl_all(session):
 def match_all_from(session,exp,ppm_diff=0.5,rt_diff=30):
     m_alias = aliased(Mtab)
     for m in session.query(Mtab, m_alias).\
-        join((m_alias, and_(Mtab.id != m_alias.id, Mtab.experiment != m_alias.experiment))).\
-        filter(Mtab.experiment == exp).\
+        join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_name != m_alias.exp_name))).\
+        filter(Mtab.exp_name == exp).\
         filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
         filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff).\
-        order_by(Mtab.mz, m_alias.experiment):
+        order_by(Mtab.mz, m_alias.exp_name):
         yield m
     
 def match_all(session,ppm_diff=0.5,rt_diff=30):

@@ -41,12 +41,12 @@ def _complete_path(text, line):
 def mtab_count(session,exp=None):
     q = session.query(func.count(Mtab.id))
     if exp is not None:
-        q = q.filter(Mtab.experiment == exp)
+        q = q.filter(Mtab.exp_name == exp)
     return q.first()[0]
 
 def list_exps(session):
-    for exp, count in session.query(Mtab.experiment, func.count()).\
-        group_by(Mtab.experiment):
+    for exp, count in session.query(Mtab.exp_name, func.count()).\
+        group_by(Mtab.exp_name):
         print '\t'.join((exp,str(count)))
 
 class Shell(cmd.Cmd):
@@ -100,7 +100,7 @@ class Shell(cmd.Cmd):
         exp = args.split(' ')[0]
         print 'Removing all %s data ...' % exp
         session = self.session_factory()
-        session.query(Mtab).filter(Mtab.experiment==exp).delete()
+        session.query(Mtab).filter(Mtab.exp_name==exp).delete()
         session.commit()
         self.do_list('')
         session.close()
