@@ -7,7 +7,7 @@ import sqlalchemy
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from kuj_orm import get_sqlite_engine, Base, Mtab, etl, mtab_search, mtab_random, match_all_from
+from kuj_orm import get_sqlite_engine, Base, Mtab, Exp, etl, mtab_search, mtab_random, match_all_from
 
 def get_session_factory():
     engine = get_sqlite_engine(delete=False)
@@ -45,9 +45,10 @@ def mtab_count(session,exp=None):
     return q.first()[0]
 
 def list_exps(session):
-    for exp, count in session.query(Mtab.exp_name, func.count()).\
-        group_by(Mtab.exp_name):
-        print '\t'.join((exp,str(count)))
+    for exp_id, count in session.query(Mtab.exp_id, func.count()).\
+        group_by(Mtab.exp_id):
+        exp = session.query(Exp).filter(Exp.id==exp_id).first()
+        print '\t'.join((exp.name,str(count)))
 
 class Shell(cmd.Cmd):
     def __init__(self,session_factory):

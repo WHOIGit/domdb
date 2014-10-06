@@ -14,11 +14,17 @@ class TextPickleType(PickleType):
 
 Base = declarative_base()
 
+class Exp(Base):
+    __tablename__ = 'experiment'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+
 class Mtab(Base):
     __tablename__ = 'metabolite'
 
     id = Column(Integer, primary_key=True)
-    exp_name = Column(String) # experiment name
+    exp_id = Column(Integer, ForeignKey('experiment.id'))
     mz = Column(Numeric) # mass-to-charge ratio
     mzmin = Column(Numeric)
     mzmax = Column(Numeric)
@@ -27,13 +33,10 @@ class Mtab(Base):
     rtmax = Column(Numeric)
     rest = Column(TextPickleType(pickler=json))
 
+    exp = relationship(Exp)
+
     def __repr__(self):
-        return '<Metabolite %s %s %s %s>' % (self.exp_name, str(self.mz), str(self.rt), json.dumps(self.rest, sort_keys=True, indent=2))
-
-def ExpAttrs(Base):
-    ___tablename__ == 'exp_attrs'
-
-    id = Column(Integer, primary_key=True)
+        return '<Metabolite %s %s %s %s>' % (self.exp.name, str(self.mz), str(self.rt), json.dumps(self.rest, sort_keys=True, indent=2))
 
 def get_sqlite_engine(delete=True):
     # first, toast db
@@ -49,6 +52,15 @@ def get_sqlite_engine(delete=True):
 COMMON_FIELDS=set(['mz','mzmin','mzmax','rt','rtmin','rtmax'])
 
 def etl(session, exp_name, path):
+    exp = session.query(Exp).filter(Exp.name==exp_name).first()
+    if exp is None:
+        print 'Creating experiment %s...' % exp_name
+        exp = Exp(name=exp_name)
+        session.add(exp)
+        session.commit()
+        print 'Created %s, adding data ...' % exp_name
+    else:
+        print 'Warning: experiment %s already exists, appending data to it' % exp_name
     with open(path) as cf:
         r = csv.DictReader(cf)
         for d in r:
@@ -56,7 +68,7 @@ def etl(session, exp_name, path):
             keys = set(d.keys())
             rest_keys = keys.difference(COMMON_FIELDS)
             md = dict((k,d[k]) for k in COMMON_FIELDS)
-            md['exp_name'] = exp_name
+            md['exp'] = exp
             rest = dict((k,d[k]) for k in rest_keys if k)
             md['rest'] = rest
             # construct orm object
@@ -67,8 +79,8 @@ def etl(session, exp_name, path):
 
 def etl_all(session):
     exp_file = {
-        'tps4': 'Tps4_pos_2014.05.23.csv',
-        'tps6': 'Tps6_pos_2014.05.23.csv'
+        'tps4': 'data/Tps4_pos_2014.05.23.csv',
+        'tps6': 'data/Tps6_pos_2014.05.23.csv'
     }
     for e,f in exp_file.items():
         etl(session, e, f)
@@ -78,11 +90,11 @@ def etl_all(session):
 def match_all_from(session,exp,ppm_diff=0.5,rt_diff=30):
     m_alias = aliased(Mtab)
     for m in session.query(Mtab, m_alias).\
-        join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_name != m_alias.exp_name))).\
-        filter(Mtab.exp_name == exp).\
+        join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_id != m_alias.exp_id))).\
+        filter(Mtab.exp.name == exp).\
         filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
         filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff).\
-        order_by(Mtab.mz, m_alias.exp_name):
+        order_by(Mtab.mz, m_alias.exp.name):
         yield m
     
 def match_all(session,ppm_diff=0.5,rt_diff=30):
