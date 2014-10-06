@@ -7,7 +7,7 @@ import sqlalchemy
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from kuj_orm import get_sqlite_engine, Base, Metabolite, etl, mtab_search, mtab_random, match_all_from
+from kuj_orm import get_sqlite_engine, Base, Mtab, etl, mtab_search, mtab_random, match_all_from
 
 def get_session_factory():
     engine = get_sqlite_engine(delete=False)
@@ -39,14 +39,14 @@ def _complete_path(text, line):
     return ret
 
 def mtab_count(session,exp=None):
-    q = session.query(func.count(Metabolite.id))
+    q = session.query(func.count(Mtab.id))
     if exp is not None:
-        q = q.filter(Metabolite.experiment == exp)
+        q = q.filter(Mtab.experiment == exp)
     return q.first()[0]
 
 def list_exps(session):
-    for exp, count in session.query(Metabolite.experiment, func.count()).\
-        group_by(Metabolite.experiment):
+    for exp, count in session.query(Mtab.experiment, func.count()).\
+        group_by(Mtab.experiment):
         print '\t'.join((exp,str(count)))
 
 class Shell(cmd.Cmd):
@@ -76,7 +76,7 @@ class Shell(cmd.Cmd):
             print 'adding data in %s as experiment %s' % (path, exp)
             session = self.session_factory()
             etl(session,exp,path)
-            n = session.query(func.count(Metabolite.id)).first()[0]
+            n = session.query(func.count(Mtab.id)).first()[0]
             print '%d metabolites in database' % n
             session.close()
     def complete_add(self, text, line, start_idx, end_idx):
@@ -100,7 +100,7 @@ class Shell(cmd.Cmd):
         exp = args.split(' ')[0]
         print 'Removing all %s data ...' % exp
         session = self.session_factory()
-        session.query(Metabolite).filter(Metabolite.experiment==exp).delete()
+        session.query(Mtab).filter(Mtab.experiment==exp).delete()
         session.commit()
         self.do_list('')
         session.close()
