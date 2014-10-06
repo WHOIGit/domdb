@@ -90,6 +90,12 @@ def etl(session, exp_name, df_path, mdf_path):
             samples[name] = sample
             sample.exp = exp
             session.add(sample)
+            # now add addrs
+            for k,v in d.items():
+                if k != 'File.Name':
+                    attr = SampleAttr(sample=sample, name=k, value=v)
+                    session.add(attr) # FIXME use association proxy
+    # now add metabolite data
     with open(df_path) as cf:
         for d in csv.DictReader(cf):
             # subset the fields
@@ -105,7 +111,8 @@ def etl(session, exp_name, df_path, mdf_path):
                 if cn in samples:
                     if s != '0':
                         print cn,s
-                        session.add(MtabIntensity(sample=samples[cn], intensity=s))
+                        # FIXME use association proxy
+                        session.add(MtabIntensity(mtab=m, sample=samples[cn], intensity=s))
             # add to session
             session.add(m)
     session.commit()
@@ -160,7 +167,7 @@ def mtab_search(session,mz,rt,ppm_diff=0.5,rt_diff=30):
 def mtab_random(session):
     return session.query(Mtab).order_by(func.random()).limit(1)[0]
 
-DELETE=False
+DELETE=True
 
 if __name__=='__main__':
     engine = get_sqlite_engine(delete=DELETE)
@@ -180,3 +187,12 @@ if __name__=='__main__':
         # for each one, find matching ones
         for match in match_one(session,m):
             print 'Match found: %s' % match
+    # now get metadata for random metabolites
+    for m in session.query(Mtab).order_by(func.random()).limit(2):
+        print 'Info about %s' % m
+        for mi in session.query(MtabIntensity).\
+            filter(MtabIntensity.mtab_id==m.id):
+            print '%s=%f {' % (mi.sample.name, mi.intensity)
+            for attr in mi.sample.attrs:
+                print '"%s": "%s"' % (attr.name, attr.value)
+            print '}'
