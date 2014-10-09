@@ -1,6 +1,6 @@
 import os
 import sys
-import readline
+#import readline
 import cmd
 
 import sqlalchemy
