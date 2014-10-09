@@ -70,13 +70,17 @@ class Shell(cmd.Cmd):
             print '%d metabolites in experiment %s' % (n, exp)
         session.close()
     def do_add(self,args):
-        exp, path = args.split(' ')
+        exp, path, mdpath = args.split(' ')
         if not os.path.exists(path):
-            print 'file %s does not exist' % path
+            print 'data file %s does not exist' % path
+        if not os.path.exists(mdpath):
+            print 'metadata file %s does not exist' % mdpath
         else:
-            print 'adding data in %s as experiment %s' % (path, exp)
+            print 'loading experiment %s from:' % exp
+            print 'data file %s' % path
+            print 'metadata file %s' % mdpath
             session = self.session_factory()
-            etl(session,exp,path)
+            etl(session,exp,path,mdpath)
             n = session.query(func.count(Mtab.id)).first()[0]
             print '%d metabolites in database' % n
             session.close()

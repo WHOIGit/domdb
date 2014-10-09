@@ -110,7 +110,6 @@ def etl(session, exp_name, df_path, mdf_path):
             for cn,s in rest.items():
                 if cn in samples:
                     if s != '0':
-                        print cn,s
                         # FIXME use association proxy
                         session.add(MtabIntensity(mtab=m, sample=samples[cn], intensity=s))
             # add to session
@@ -167,7 +166,7 @@ def mtab_search(session,mz,rt,ppm_diff=0.5,rt_diff=30):
 def mtab_random(session):
     return session.query(Mtab).order_by(func.random()).limit(1)[0]
 
-DELETE=True
+DELETE=False
 
 if __name__=='__main__':
     engine = get_sqlite_engine(delete=DELETE)
@@ -186,13 +185,12 @@ if __name__=='__main__':
         print 'Looking for matches for %s' % m
         # for each one, find matching ones
         for match in match_one(session,m):
-            print 'Match found: %s' % match
-    # now get metadata for random metabolites
-    for m in session.query(Mtab).order_by(func.random()).limit(2):
-        print 'Info about %s' % m
-        for mi in session.query(MtabIntensity).\
-            filter(MtabIntensity.mtab_id==m.id):
-            print '%s=%f {' % (mi.sample.name, mi.intensity)
-            for attr in mi.sample.attrs:
-                print '"%s": "%s"' % (attr.name, attr.value)
-            print '}'
+            # now get metadata for matching metabolites
+            for mi in session.query(MtabIntensity).\
+                filter(MtabIntensity.mtab_id==m.id):
+                print '%s matched %s {' % (m,match)
+                print 'sample: %s' % (mi.sample.name)
+                print 'intensity: %s' % (mi.intensity)
+                for attr in mi.sample.attrs:
+                    print '"%s": "%s"' % (attr.name, attr.value)
+                print '}'
