@@ -136,7 +136,7 @@ def match_all_from(session,exp,ppm_diff=0.5,rt_diff=30):
     m_alias = aliased(Mtab)
     for m in session.query(Mtab, m_alias).\
         join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_id != m_alias.exp_id))).\
-        filter(Mtab.exp.name == exp).\
+        filter(Mtab.exp.has(name=exp)).\
         filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
         filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff).\
         order_by(Mtab.mz, m_alias.exp.name):
