@@ -6,10 +6,15 @@ import sqlalchemy
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from kuj_orm import get_sqlite_engine, Base, Mtab, Exp, etl, mtab_search, mtab_random, match_all_from
+from kuj_orm import get_sqlite_engine, Base, Mtab, Exp, etl, mtab_search, mtab_random, match_all_from, match_one
+
+DEBUG=False
 
 def get_session_factory():
-    engine = get_sqlite_engine(delete=False)
+    if DEBUG:
+        engine = sqlalchemy.create_engine('sqlite://')
+    else:
+        engine = get_sqlite_engine(delete=False)
     Base.metadata.create_all(engine)
     Session = sessionmaker()
     Session.configure(bind=engine)
@@ -107,6 +112,18 @@ class Shell(cmd.Cmd):
         session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
         session.commit()
         self.do_list('')
+        session.close()
+    def do_test(self,args):
+        session = self.session_factory()
+        print 'Randomly matching metabolites...'
+        while True:
+            mtab = mtab_random(session)
+            ms = list(match_one(session,mtab))
+            if ms:
+                print '%s matched the following:' % mtab
+                for m in ms:
+                    print '* %s' % m
+                break
         session.close()
     def do_random(self,args):
         session = self.session_factory()
