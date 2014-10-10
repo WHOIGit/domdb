@@ -6,7 +6,8 @@ import sqlalchemy
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from kuj_orm import get_sqlite_engine, Base, Mtab, Exp, etl, mtab_search, mtab_random, match_all_from, match_one
+from test import get_sqlite_engine
+from kuj_orm import Base, Mtab, Exp, etl, mtab_search, mtab_random, match_all_from, match_one
 
 DEBUG=False
 
