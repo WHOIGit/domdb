@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from kuj_orm import Base, Mtab, MtabIntensity
-from kuj_orm import etl, match_one
+from kuj_orm import etl, match_one, mtab_random
 
 def get_sqlite_engine(delete=True):
     # first, toast db
@@ -50,7 +50,8 @@ if __name__=='__main__':
     print '%d metabolites loaded' % n
     # now pick four metabolites at random
     while True:
-        m = session.query(Mtab).order_by(func.random()).limit(1).first()
+        m = mtab_random(session)
+        #session.query(Mtab).order_by(func.random()).limit(1).first()
         # for each one, find matching ones
         ms = list(match_one(session,m))
         if ms:
@@ -58,7 +59,7 @@ if __name__=='__main__':
             for match in ms:
                 # now get metadata for matching metabolites
                 for mi in session.query(MtabIntensity).\
-                    filter(MtabIntensity.mtab_id==m.id):
+                    filter(MtabIntensity.mtab_id==match.id):
                     print '%s matched %s {' % (m,match)
                     print 'sample: %s' % (mi.sample.name)
                     print 'intensity: %s' % (mi.intensity)
