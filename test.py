@@ -51,19 +51,47 @@ if __name__=='__main__':
     # now pick four metabolites at random
     while True:
         m = mtab_random(session)
-        #session.query(Mtab).order_by(func.random()).limit(1).first()
         # for each one, find matching ones
         ms = list(match_one(session,m))
-        if ms:
-            print 'Found matches for %s:' % m
+        if ms: # found matches. format as CSV
+            out_recs = []
+            # fixed schema
+            out_schema = [
+                'mtab_exp', # source mtab experiment name
+                'mtab_mz', # source mtab m/z
+                'mtab_rt', # source mtab retention time
+                'match_exp', # matched mtab experiment name
+                'match_mz', # matched mtab m/z
+                'match_rt', # match mtab retention time
+                'sample', # sample / datafile containing matched mtab
+                'intensity' # intensity of matched mtab in that sample
+            ]
             for match in ms:
-                # now get metadata for matching metabolites
+                # now get metadata for matching metabolite
                 for mi in session.query(MtabIntensity).\
                     filter(MtabIntensity.mtab_id==match.id):
-                    print '%s matched %s {' % (m,match)
-                    print 'sample: %s' % (mi.sample.name)
-                    print 'intensity: %s' % (mi.intensity)
+                    # populate fixed schema
+                    out_rec = {
+                        'mtab_exp': m.exp.name,
+                        'mtab_mz': m.mz,
+                        'mtab_rt': m.rt,
+                        'match_exp': match.exp.name,
+                        'match_mz': match.mz,
+                        'match_rt': match.rt,
+                        'sample': mi.sample.name,
+                        'intensity': mi.intensity
+                    }
+                    # now populate variable (per experiment) schema
                     for attr in mi.sample.attrs:
-                        print '"%s": "%s"' % (attr.name, attr.value)
-                    print '}'
+                        assert not attr.name in out_rec # fail fast if names collide
+                        out_rec[attr.name] = attr.value
+                        if attr.name not in out_schema: # keep track of all attributes we find
+                            out_schema.append(attr.name)
+                    out_recs.append(out_rec) # save record
+            # now format the output records according to the accumulated union schema
+            print ','.join(out_schema)
+            for rec in out_recs:
+                out_row = [rec.get(k,'') for k in out_schema]
+                print ','.join(map(str,out_row)) # FIXME format numbers properly
+            # for now exit because we're just doing one source mtab at a time in this test
             break
