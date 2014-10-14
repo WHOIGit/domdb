@@ -163,6 +163,7 @@ class Shell(cmd.Cmd):
         print 'Removing all %s data ...' % exp
         session = self.session_factory()
         session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
+        session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
         session.commit()
         self.do_list('')
         session.close()
