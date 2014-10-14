@@ -65,14 +65,21 @@ class MtabIntensity(Base):
 
 COMMON_FIELDS=set(['mz','mzmin','mzmax','rt','rtmin','rtmax'])
 
-def etl(session, exp_name, df_path, mdf_path):
+def etl(session, exp_name, df_path, mdf_path, log=None):
+    if not log: # log progress
+        log = lambda x: None
     exp = session.query(Exp).filter(Exp.name==exp_name).first()
     if exp is None:
         exp = Exp(name=exp_name)
         session.add(exp)
+    else:
+        log("experiment %s has already been added to database, use 'remove %s' to remove it" % (exp_name, exp_name))
+        return
     # first, do sample metadata for this experiment
     samples = {}
     with open(mdf_path) as cf:
+        log('loading %s metadata from %s' % (exp_name, mdf_path))
+        n = 0
         for d in csv.DictReader(cf):
             name = d['File.Name']
             sample = Sample(name=name)
@@ -84,8 +91,16 @@ def etl(session, exp_name, df_path, mdf_path):
                 if k != 'File.Name':
                     attr = SampleAttr(sample=sample, name=k, value=v)
                     session.add(attr) # FIXME use association proxy
+            n += 1
+            if n % 100 == 0:
+                log('loaded %d samples so far' % n)
+                session.commit()
+    session.commit()
+    log('%d total samples loaded' % n)
+    n = 0
     # now add metabolite data
     with open(df_path) as cf:
+        log('loading %s metabolite data from %s' % (exp_name, df_path))
         for d in csv.DictReader(cf):
             # subset the fields
             keys = set(d.keys())
@@ -103,33 +118,41 @@ def etl(session, exp_name, df_path, mdf_path):
                         session.add(MtabIntensity(mtab=m, sample=samples[cn], intensity=s))
             # add to session
             session.add(m)
+            n += 1
+            if n % 1000 == 0:
+                log('loaded %d metabolites so far' % n)
+                session.commit()
     session.commit()
+    log('loaded %d total metabolites' % n)
 
 def match_all_from(session,exp,ppm_diff=0.5,rt_diff=30):
     m_alias = aliased(Mtab)
-    for m in session.query(Mtab, m_alias).\
-        join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_id != m_alias.exp_id))).\
+    for row in session.query(Mtab, m_alias).\
         filter(Mtab.exp.has(name=exp)).\
-        join((Exp, Exp.id==m_alias.exp_id)).\
-        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
+        join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_id != m_alias.exp_id))).\
         filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff).\
-        order_by(Mtab.mz, Exp.name):
-        yield m
-    
+        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
+        join((Exp, Exp.id==m_alias.exp_id)).\
+        order_by(Mtab.mz, Exp.name).\
+        all():
+        yield row
+
 def match_all(session,ppm_diff=0.5,rt_diff=30):
     m_alias = aliased(Mtab)
-    for m in session.query(Mtab, m_alias).\
+    for row in session.query(Mtab, m_alias).\
         join((m_alias, Mtab.id != m_alias.id)).\
+        filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff).\
         filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
-        filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff):
-        yield m
+        all():
+        yield row
 
 def match_one(session,m,ppm_diff=0.5,rt_diff=30):
-    for m in session.query(Mtab).\
+    for row in session.query(Mtab).\
         filter(Mtab.id != m.id).\
+        filter(func.abs(Mtab.rt - m.rt) <= rt_diff).\
         filter(func.abs(1e6 * (Mtab.mz - m.mz) / m.mz) <= ppm_diff).\
-        filter(func.abs(Mtab.rt - m.rt) <= rt_diff):
-        yield m
+        all():
+        yield row
 
 def mtab_search(session,mz,rt,ppm_diff=0.5,rt_diff=30):
     for m in session.query(Mtab).\

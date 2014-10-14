@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from test import get_sqlite_engine
-from kuj_orm import Base, Mtab, Exp, etl, mtab_search, mtab_random, match_all_from, match_one
+from kuj_orm import Base, Mtab, MtabIntensity, Exp, etl, mtab_search, mtab_random, match_all_from, match_one
 
 DEBUG=False
 
@@ -55,6 +55,51 @@ def list_exps(session):
         exp = session.query(Exp).filter(Exp.id==exp_id).first()
         print '\t'.join((exp.name,str(count)))
 
+def matches_as_csv(session,pairs):
+    for m, match in pairs:
+        out_recs = []
+        # fixed schema
+        out_schema = [
+            'mtab_exp', # source mtab experiment name
+            'mtab_mz', # source mtab m/z
+            'mtab_rt', # source mtab retention time
+            'match_exp', # matched mtab experiment name
+            'match_mz', # matched mtab m/z
+            'match_rt', # match mtab retention time
+            'sample', # sample / datafile containing matched mtab
+            'intensity' # intensity of matched mtab in that sample
+        ]
+        # now get metadata for matching metabolite
+        for mi in session.query(MtabIntensity).\
+            filter(MtabIntensity.mtab_id==match.id):
+            # populate fixed schema
+            out_rec = {
+                'mtab_exp': m.exp.name,
+                'mtab_mz': m.mz,
+                'mtab_rt': m.rt,
+                'match_exp': match.exp.name,
+                'match_mz': match.mz,
+                'match_rt': match.rt,
+                'sample': mi.sample.name,
+                'intensity': mi.intensity
+            }
+            # now populate variable (per experiment) schema
+            for attr in mi.sample.attrs:
+                assert not attr.name in out_rec # fail fast if names collide
+                out_rec[attr.name] = attr.value
+                if attr.name not in out_schema: # keep track of all attributes we find
+                    out_schema.append(attr.name)
+            out_recs.append(out_rec) # save record
+        # now we have all the output records in hand
+        # format the output records according to the accumulated union schema
+        yield ','.join(out_schema)
+        for rec in out_recs:
+            out_row = [rec.get(k,'') for k in out_schema]
+            yield ','.join(map(str,out_row)) # FIXME format numbers better
+    
+def console_log(message):
+    print message
+
 class Shell(cmd.Cmd):
     def __init__(self,session_factory):
         cmd.Cmd.__init__(self)
@@ -85,7 +130,7 @@ class Shell(cmd.Cmd):
             print 'data file %s' % path
             print 'metadata file %s' % mdpath
             session = self.session_factory()
-            etl(session,exp,path,mdpath)
+            etl(session,exp,path,mdpath,log=console_log)
             n = session.query(func.count(Mtab.id)).first()[0]
             print '%d metabolites in database' % n
             session.close()
@@ -100,11 +145,18 @@ class Shell(cmd.Cmd):
             print m
         session.close()
     def do_all(self,args):
-        exp = args.split(' ')[0]
+        exp, outf = args.split(' ')
         session = self.session_factory()
-        print 'Searching for matches from %s' % exp
-        for m in match_all_from(session,exp):
-            print m
+        print 'Searching for matches from %s, please wait ...' % exp
+        matches = list(match_all_from(session,exp))
+        if not matches:
+            print 'No matches found'
+        else:
+            print 'Found %d matches' % len(matches)
+            with open(outf,'w') as fout:
+                print 'Saving results to %s ...' % outf
+                for line in matches_as_csv(session,matches):
+                    print >> fout, line
         session.close()
     def do_remove(self,args):
         exp = args.split(' ')[0]
