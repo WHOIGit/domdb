@@ -123,17 +123,18 @@ class Shell(cmd.Cmd):
         exp, path, mdpath = args.split(' ')
         if not os.path.exists(path):
             print 'data file %s does not exist' % path
+            return
         if not os.path.exists(mdpath):
             print 'metadata file %s does not exist' % mdpath
-        else:
-            print 'loading experiment %s from:' % exp
-            print 'data file %s' % path
-            print 'metadata file %s' % mdpath
-            session = self.session_factory()
-            etl(session,exp,path,mdpath,log=console_log)
-            n = session.query(func.count(Mtab.id)).first()[0]
-            print '%d metabolites in database' % n
-            session.close()
+            return
+        print 'loading experiment %s from:' % exp
+        print 'data file %s' % path
+        print 'metadata file %s' % mdpath
+        session = self.session_factory()
+        etl(session,exp,path,mdpath,log=console_log)
+        n = session.query(func.count(Mtab.id)).first()[0]
+        print '%d metabolites in database' % n
+        session.close()
     def complete_add(self, text, line, start_idx, end_idx):
         return _complete_path(text, line)
     def do_search(self,args):
