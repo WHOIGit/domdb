@@ -16,6 +16,8 @@ class Exp(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String)
 
+    # backref to samples
+
 class Mtab(Base):
     __tablename__ = 'metabolite'
 
@@ -28,7 +30,7 @@ class Mtab(Base):
     rtmin = Column(Numeric)
     rtmax = Column(Numeric)
 
-    exp = relationship(Exp)
+    exp = relationship(Exp, backref=backref('mtabs', cascade='all,delete-orphan'))
 
     def __repr__(self):
         return '<Metabolite %s %s %s>' % (self.exp.name, str(self.mz), str(self.rt))
@@ -60,8 +62,8 @@ class MtabIntensity(Base):
     mtab_id = Column(Integer, ForeignKey('metabolite.id'))
     intensity = Column(Numeric)
 
-    sample = relationship(Sample)
-    mtab = relationship(Mtab)
+    sample = relationship(Sample, backref=backref('intensities', cascade='all,delete-orphan'))
+    mtab = relationship(Mtab, backref=backref('intensities', cascade='all,delete-orphan'))
 
 COMMON_FIELDS=set(['mz','mzmin','mzmax','rt','rtmin','rtmax'])
 
@@ -125,6 +127,10 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     session.commit()
     log('loaded %d total metabolites' % n)
 
+def remove_exp(session,exp):
+    session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
+    session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
+    
 def match_all_from(session,exp,ppm_diff=0.5,rt_diff=30):
     m_alias = aliased(Mtab)
     for row in session.query(Mtab, m_alias).\

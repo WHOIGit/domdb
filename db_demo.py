@@ -7,7 +7,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from test import get_sqlite_engine
-from kuj_orm import Base, Mtab, MtabIntensity, Exp, etl, mtab_search, mtab_random, match_all_from, match_one
+from kuj_orm import Base, Mtab, MtabIntensity, Exp
+from kuj_orm import etl, mtab_search, mtab_random, match_all_from, match_one, remove_exp
 
 DEBUG=False
 
@@ -162,8 +163,7 @@ class Shell(cmd.Cmd):
         exp = args.split(' ')[0]
         print 'Removing all %s data ...' % exp
         session = self.session_factory()
-        session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
-        session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
+        remove_exp(session)
         session.commit()
         self.do_list('')
         session.close()

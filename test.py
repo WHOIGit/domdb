@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from kuj_orm import Base, Mtab, MtabIntensity
-from kuj_orm import etl, match_one, mtab_random
+from kuj_orm import etl, match_one, mtab_random, remove_exp
 
 def get_sqlite_engine(delete=True):
     # first, toast db
@@ -20,21 +20,40 @@ def get_sqlite_engine(delete=True):
 
 def etl_examples(session):
     exp_data = {
-        'tps4': 'data/Tps4_pos_2014.05.23.csv',
-        'tps6': 'data/Tps6_pos_2014.05.23.csv'
+#        'tps4': 'data/Tps4_pos_2014.05.23.csv',
+#        'tps6': 'data/Tps6_pos_2014.05.23.csv'
+        'deepdom': 'LCdata/DeepDOMtraps_pos_aligned.2014.05.05_v1.csv',
+        'ventdom': 'LCdata/ventDOM_pos_aligned.2014.05.20_v1.csv'
     }
     exp_metadata = {
-        'tps4': 'metadata/Tps4_metadata.csv',
-        'tps6': 'metadata/Tps6_metadata.csv'
+#        'tps4': 'metadata/Tps4_metadata.csv',
+#        'tps6': 'metadata/Tps6_metadata.csv'
+        'deepdom': 'LCdata/DeepDOMtraps_metadata.csv',
+        'ventdom': 'LCdata/ventDOM_metadata.csv'
     }
     for e in exp_data.keys():
         data = exp_data[e]
         metadata = exp_metadata[e]
-        etl(session, e, data, metadata)
+        def loggy(x):
+            print x
+        etl(session, e, data, metadata, log=loggy)
+    # now commit
+    session.commit()
+    # now remove one of the experiments
+    for e in exp_data.keys()[:1]:
+        print 'Removing %s ...' % e
+        remove_exp(session,e)
+        session.commit()
+        print 'Re-adding %s ...' % e
+        data = exp_data[e]
+        metadata = exp_metadata[e]
+        def loggy(x):
+            print x
+        etl(session, e, data, metadata, log=loggy)
     # now commit
     session.commit()
 
-DELETE=False
+DELETE=True
 
 if __name__=='__main__':
     engine = get_sqlite_engine(delete=DELETE)
