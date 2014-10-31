@@ -22,13 +22,22 @@ def get_session_factory():
     Session.configure(bind=engine)
     return Session
 
+# Mac OS readline support requires serious hacking, cribbed from
+# http://stackoverflow.com/questions/7116038/python-tab-completion-mac-osx-10-7-lion
+import readline
+import rlcompleter
+if 'libedit' in readline.__doc__:
+    readline.parse_and_bind("bind ^I rl_complete")
+else:
+    readline.parse_and_bind("tab: complete")
+
 # lifting path completion from
 # https://stackoverflow.com/questions/16826172/filename-tab-completion-in-cmd-cmd-of-python
 def _complete_path(text, line):
     arg = line.split()[1:]
     dir, base = '', ''
     try: 
-        dir, base = os.path.split(arg[-1])
+        dir, base = op.split(arg[-1])
     except:
         pass
     cwd = os.getcwd()
@@ -36,7 +45,7 @@ def _complete_path(text, line):
         os.chdir(dir)
     except:
         pass
-    ret = [f+os.sep if os.path.isdir(f) else f for f in os.listdir('.') if f.startswith(base)]
+    ret = [f+os.sep if op.isdir(f) else f for f in os.listdir('.') if f.startswith(base)]
     if base == '' or base == '.': 
         ret.extend(['./', '../'])
     elif base == '..':
