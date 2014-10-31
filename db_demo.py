@@ -56,6 +56,14 @@ def list_exps(session):
         exp = session.query(Exp).filter(Exp.id==exp_id).first()
         print '\t'.join((exp.name,str(count)))
 
+def avoid_name_collisions(name,schema):
+    n = 1
+    newname = name
+    while newname in schema:
+        newname = '%s_%d' % (name, n)
+        n += 1
+    return newname
+
 def matches_as_csv(session,pairs):
     out_recs = []
     # fixed schema
@@ -86,10 +94,11 @@ def matches_as_csv(session,pairs):
             }
             # now populate variable (per experiment) schema
             for attr in mi.sample.attrs:
-                assert not attr.name in out_rec # fail fast if names collide
-                out_rec[attr.name] = attr.value
-                if attr.name not in out_schema: # keep track of all attributes we find
-                    out_schema.append(attr.name)
+                # avoid collisions of attr names
+                attrname = avoid_name_collisions(attr.name, out_rec)
+                out_rec[attrname] = attr.value
+                if attrname not in out_schema: # keep track of all attributes we find
+                    out_schema.append(attrname)
             out_recs.append(out_rec) # save record
     # now we have all the output records in hand
     # format the output records according to the accumulated union schema
@@ -164,10 +173,10 @@ class Shell(cmd.Cmd):
         exp = args.split(' ')[0]
         print 'Removing all %s data ...' % exp
         session = self.session_factory()
-        remove_exp(session)
-        session.commit()
-        self.do_list('')
+        remove_exp(session,exp)
+        session.expire_all() # FIXME redundant?
         session.close()
+        self.do_list('')
     def do_test(self,args):
         session = self.session_factory()
         print 'Randomly matching metabolites...'

@@ -128,8 +128,13 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     log('loaded %d total metabolites' % n)
 
 def remove_exp(session,exp):
+    # FIXME cascading ORM delete should make this unnecessary
     session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
+    session.commit()
+    session.query(Sample).filter(Sample.exp.has(name=exp)).delete(synchronize_session='fetch')
+    session.commit()
     session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
+    session.commit()
     
 def match_all_from(session,exp,ppm_diff=0.5,rt_diff=30):
     m_alias = aliased(Mtab)
