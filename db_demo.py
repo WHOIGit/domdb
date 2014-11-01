@@ -28,8 +28,10 @@ import readline
 import rlcompleter
 if 'libedit' in readline.__doc__:
     readline.parse_and_bind("bind ^I rl_complete")
+    LIBEDIT=True
 else:
     readline.parse_and_bind("tab: complete")
+    LIBEDIT=False
 
 # lifting path completion from
 # https://stackoverflow.com/questions/16826172/filename-tab-completion-in-cmd-cmd-of-python
@@ -46,13 +48,15 @@ def _complete_path(text, line):
         completions = []
         for f in os.listdir(dir):
             if f.startswith(base):
-                cpath = os.path.join(dir,f)
+                if LIBEDIT:
+                    cpath = os.path.join(dir,f)
+                else:
+                    cpath = f
                 if os.path.isfile(cpath):
                     completions.append(cpath)
                 else:
                     completions.append(cpath+'/')
     return completions
-
 
 def mtab_count(session,exp=None):
     q = session.query(func.count(Mtab.id))
