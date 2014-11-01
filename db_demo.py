@@ -48,14 +48,15 @@ def _complete_path(text, line):
         completions = []
         for f in os.listdir(dir):
             if f.startswith(base):
+                cpath = os.path.join(dir,f)
                 if LIBEDIT:
-                    cpath = os.path.join(dir,f)
+                    addpath = cpath
                 else:
-                    cpath = f
+                    addpath = f
                 if os.path.isfile(cpath):
-                    completions.append(cpath)
+                    completions.append(addpath)
                 else:
-                    completions.append(cpath+'/')
+                    completions.append(addpath+'/')
     return completions
 
 def mtab_count(session,exp=None):

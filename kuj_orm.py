@@ -81,7 +81,6 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     samples = {}
     with open(mdf_path) as cf:
         log('loading %s metadata from %s' % (exp_name, mdf_path))
-        n = 0
         for d in csv.DictReader(cf):
             name = d['File.Name']
             sample = Sample(name=name)
@@ -93,12 +92,7 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
                 if k != 'File.Name':
                     attr = SampleAttr(sample=sample, name=k, value=v)
                     session.add(attr) # FIXME use association proxy
-            n += 1
-            if n % 100 == 0:
-                log('loaded %d samples so far' % n)
-                session.commit()
-    session.commit()
-    log('%d total samples loaded' % n)
+    log('%d total samples loaded' % len(samples))
     n = 0
     # now add metabolite data
     with open(df_path) as cf:
@@ -113,11 +107,17 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
             m = Mtab(**md)
             # now record mtab intensity per sample
             rest = dict((k,d[k]) for k in rest_keys if k)
+            mi = None
             for cn,s in rest.items():
                 if cn in samples:
+                    mi = MtabIntensity(mtab=m, sample=samples[cn], intensity=s)
                     if s != '0':
                         # FIXME use association proxy
-                        session.add(MtabIntensity(mtab=m, sample=samples[cn], intensity=s))
+                        session.add(mi)
+            if mi is None:
+                log('ERROR: sample missing from metadata, wrong metadata file?')
+                session.rollback()
+                return
             # add to session
             session.add(m)
             n += 1
