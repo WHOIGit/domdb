@@ -107,7 +107,22 @@ def matches_as_csv(session,pairs):
     for rec in out_recs:
         out_row = [rec.get(k,'') for k in out_schema]
         yield ','.join(map(str,out_row)) # FIXME format numbers better
-    
+
+def search_out_csv(session,matches,outf=None):
+    if not matches:
+        print 'No matches found'
+        return
+    print 'Found %d matches' % len(matches)
+    outlines = matches_as_csv(session,matches)
+    if outf is not None:
+        with open(outf,'w') as fout:
+            print 'Saving results to %s ...' % outf
+            for line in outlines:
+                print >> fout, line
+    else:
+        for line in outlines:
+            print line
+
 def console_log(message):
     print message
 
@@ -149,26 +164,25 @@ class Shell(cmd.Cmd):
     def complete_add(self, text, line, start_idx, end_idx):
         return _complete_path(text, line)
     def do_search(self,args):
-        mz, rt = args.split(' ')
+        outf = None
+        try:
+            mz, rt = args.split(' ')
+        except ValueError:
+            mz, rt, outf = args.split(' ')
         mz = float(mz)
         rt = float(rt)
+        fake_exp = Exp(name='N/A')
+        fake_mtab = Mtab(rt=rt, mz=mz, exp=fake_exp)
         session = self.session_factory()
-        for m in mtab_search(session,mz,rt):
-            print m
+        pairs = [(fake_mtab, m) for m in mtab_search(session,mz,rt)]
+        search_out_csv(session,pairs,outf)
         session.close()
     def do_all(self,args):
         exp, outf = args.split(' ')
         session = self.session_factory()
         print 'Searching for matches from %s, please wait ...' % exp
         matches = list(match_all_from(session,exp))
-        if not matches:
-            print 'No matches found'
-        else:
-            print 'Found %d matches' % len(matches)
-            with open(outf,'w') as fout:
-                print 'Saving results to %s ...' % outf
-                for line in matches_as_csv(session,matches):
-                    print >> fout, line
+        search_out_csv(session,matches,outf)
         session.close()
     def do_remove(self,args):
         exp = args.split(' ')[0]
