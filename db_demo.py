@@ -35,23 +35,24 @@ else:
 # https://stackoverflow.com/questions/16826172/filename-tab-completion-in-cmd-cmd-of-python
 def _complete_path(text, line):
     arg = line.split()[1:]
-    dir, base = '', ''
-    try: 
-        dir, base = op.split(arg[-1])
-    except:
-        pass
-    cwd = os.getcwd()
-    try: 
-        os.chdir(dir)
-    except:
-        pass
-    ret = [f+os.sep if op.isdir(f) else f for f in os.listdir('.') if f.startswith(base)]
-    if base == '' or base == '.': 
-        ret.extend(['./', '../'])
-    elif base == '..':
-        ret.append('../')
-    os.chdir(cwd)
-    return ret
+    if not arg:
+        completions = os.listdir('./')
+    else:
+        dir, part, base = arg[-1].rpartition('/')
+        if part == '':
+            dir = './'
+        elif dir == '':
+            dir = '/'            
+        completions = []
+        for f in os.listdir(dir):
+            if f.startswith(base):
+                cpath = os.path.join(dir,f)
+                if os.path.isfile(cpath):
+                    completions.append(cpath)
+                else:
+                    completions.append(cpath+'/')
+    return completions
+
 
 def mtab_count(session,exp=None):
     q = session.query(func.count(Mtab.id))
