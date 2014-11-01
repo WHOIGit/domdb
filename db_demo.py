@@ -51,10 +51,11 @@ def mtab_count(session,exp=None):
     return q.first()[0]
 
 def list_exps(session):
-    for exp_id, count in session.query(Mtab.exp_id, func.count()).\
-        group_by(Mtab.exp_id):
-        exp = session.query(Exp).filter(Exp.id==exp_id).first()
-        print '\t'.join((exp.name,str(count)))
+    print '\t'.join(['name','samples','metabolites'])
+    for exp in session.query(Exp).all():
+        n_samples = len(exp.samples)
+        n_mtabs = session.query(func.count(Mtab.id)).filter(Mtab.exp==exp).first()[0]
+        print '%s\t%d\t%d' % (exp.name, n_samples, n_mtabs)
 
 def avoid_name_collisions(name,schema):
     n = 1
