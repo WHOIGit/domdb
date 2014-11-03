@@ -66,6 +66,8 @@ class MtabIntensity(Base):
     mtab = relationship(Mtab, backref=backref('intensities', cascade='all,delete-orphan'))
 
 COMMON_FIELDS=set(['mz','mzmin','mzmax','rt','rtmin','rtmax'])
+IGNORE='ignore'
+FILE_NAME='File.Name'
 
 def etl(session, exp_name, df_path, mdf_path, log=None):
     if not log: # log progress
@@ -79,20 +81,24 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
         return
     # first, do sample metadata for this experiment
     samples = {}
+    ignored = 0
     with open(mdf_path) as cf:
         log('loading %s metadata from %s' % (exp_name, mdf_path))
         for d in csv.DictReader(cf):
-            name = d['File.Name']
+            if IGNORE in d and d[IGNORE]=='1':
+                ignored += 1
+                continue # skip this sample
+            name = d[FILE_NAME]
             sample = Sample(name=name)
             samples[name] = sample
             sample.exp = exp
             session.add(sample)
             # now add addrs
             for k,v in d.items():
-                if k != 'File.Name':
+                if k != FILE_NAME:
                     attr = SampleAttr(sample=sample, name=k, value=v)
                     session.add(attr) # FIXME use association proxy
-    log('%d total samples loaded' % len(samples))
+    log('%d total samples loaded, %d ignored' % (len(samples), ignored))
     n = 0
     # now add metabolite data
     with open(df_path) as cf:
@@ -115,7 +121,7 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
                         # FIXME use association proxy
                         session.add(mi)
             if mi is None:
-                log('ERROR: sample missing from metadata, wrong metadata file?')
+                log('ERROR: all samples missing from metadata, wrong metadata file?')
                 session.rollback()
                 return
             # add to session
