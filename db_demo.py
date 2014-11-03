@@ -178,9 +178,13 @@ class Shell(cmd.Cmd):
             if key not in self.config:
                 print 'ERROR: unknown parameter %s' % key
             else:
-                self.config[key] = float(value)
+                try:
+                    self.config[key] = float(value)
+                except ValueError:
+                    print 'ERROR: bad value for %s: "%s"' % (key,value)
+                    return
         except ValueError:
-            print 'ERROR: bad value for %s: "%s"' % (key,value)
+            pass
         rows = [dict(param=k,value=v) for k,v in self.config.items()]
         for line in asciitable(rows,['param','value']):
             print line
