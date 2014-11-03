@@ -1,8 +1,13 @@
 def rpad(s,l,pad_string=' '):
     return s + (pad_string * (l - len(s)))
 
-def asciitable(dicts,disp_cols=None):
+def asciitable(dicts,disp_cols=None,none_msg=None):
     """produce an ASCII formatted columnar table from the dicts"""
+    dicts = list(dicts)
+    if not dicts:
+        if none_msg is not None:
+            yield none_msg
+        return
     # set of all keys in dicts
     cols = sorted(list(set(reduce(lambda x,y: x+y, [d.keys() for d in dicts]))))
     if disp_cols is not None:

@@ -82,7 +82,7 @@ def list_exps(session):
                 'samples': n_samples,
                 'metabolites': n_mtabs
             }
-    for line in asciitable(list(q()),['name','samples','metabolites']):
+    for line in asciitable(list(q()),['name','samples','metabolites'],'Database is empty'):
         print line
 
 def avoid_name_collisions(name,schema):
