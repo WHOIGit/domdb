@@ -10,8 +10,11 @@ from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
 from kuj_orm import etl, mtab_search, mtab_random, match_all_from, match_one, remove_exp
 
+from utils import asciitable
+
 DEBUG=False
 
+# ORM session management
 def get_session_factory():
     if DEBUG:
         engine = sqlalchemy.create_engine('sqlite://')
@@ -21,6 +24,8 @@ def get_session_factory():
     Session = sessionmaker()
     Session.configure(bind=engine)
     return Session
+
+# tab-completion in command line
 
 # Mac OS readline support requires serious hacking, cribbed from
 # http://stackoverflow.com/questions/7116038/python-tab-completion-mac-osx-10-7-lion
@@ -59,6 +64,8 @@ def _complete_path(text, line):
                     completions.append(addpath+'/')
     return completions
 
+# ORM utilities
+
 def mtab_count(session,exp=None):
     q = session.query(func.count(Mtab.id))
     if exp is not None:
@@ -66,11 +73,17 @@ def mtab_count(session,exp=None):
     return q.first()[0]
 
 def list_exps(session):
-    print '\t'.join(['name','samples','metabolites'])
-    for exp in session.query(Exp).all():
-        n_samples = len(exp.samples)
-        n_mtabs = session.query(func.count(Mtab.id)).filter(Mtab.exp==exp).first()[0]
-        print '%s\t%d\t%d' % (exp.name, n_samples, n_mtabs)
+    def q():
+        for exp in session.query(Exp).all():
+            n_samples = len(exp.samples)
+            n_mtabs = session.query(func.count(Mtab.id)).filter(Mtab.exp==exp).first()[0]
+            yield {
+                'name': exp.name,
+                'samples': n_samples,
+                'metabolites': n_mtabs
+            }
+    for line in asciitable(list(q()),['name','samples','metabolites']):
+        print line
 
 def avoid_name_collisions(name,schema):
     n = 1
@@ -138,18 +151,39 @@ def search_out_csv(session,matches,outf=None):
         for line in outlines:
             print line
 
+# command-line interface
+
 def console_log(message):
     print message
+
+PPM_DIFF='ppm_diff'
+RT_DIFF='rt_diff'
 
 class Shell(cmd.Cmd):
     def __init__(self,session_factory):
         cmd.Cmd.__init__(self)
         self.session_factory = session_factory
         self.do_count('')
+        self.config = {
+            PPM_DIFF: 0.5,
+            RT_DIFF: 30
+        }
     def do_list(self,args):
         session = self.session_factory()
         list_exps(session)
         session.close()
+    def do_config(self,args):
+        try:
+            key, value = args.split(' ')
+            if key not in self.config:
+                print 'unknown configuration key %s' % key
+            else:
+                self.config[key] = float(value)
+        except ValueError:
+            pass
+        rows = [dict(param=k,value=v) for k,v in self.config.items()]
+        for line in asciitable(rows,['param','value']):
+            print line
     def do_count(self,args):
         session = self.session_factory()
         if not args:
@@ -189,15 +223,16 @@ class Shell(cmd.Cmd):
         fake_exp = Exp(name='N/A')
         fake_mtab = Mtab(rt=rt, mz=mz, exp=fake_exp)
         session = self.session_factory()
-        pairs = [(fake_mtab, m) for m in mtab_search(session,mz,rt)]
+        q = mtab_search(session,mz,rt,ppm_diff=self.config[PPM_DIFF],rt_diff=self.config[RT_DIFF])
+        pairs = [(fake_mtab, m) for m in q]
         search_out_csv(session,pairs,outf)
         session.close()
     def do_all(self,args):
         exp, outf = args.split(' ')
         session = self.session_factory()
         print 'Searching for matches from %s, please wait ...' % exp
-        matches = list(match_all_from(session,exp))
-        search_out_csv(session,matches,outf)
+        q = match_all_from(session,exp,ppm_diff=self.config[PPM_DIFF],rt_diff=self.config[RT_DIFF])
+        search_out_csv(session,list(q),outf)
         session.close()
     def do_remove(self,args):
         exp = args.split(' ')[0]
