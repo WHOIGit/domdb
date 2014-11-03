@@ -113,15 +113,18 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
             m = Mtab(**md)
             # now record mtab intensity per sample
             rest = dict((k,d[k]) for k in rest_keys if k)
-            mi = None
+            samples_found = False
             for cn,s in rest.items():
                 if cn in samples:
-                    mi = MtabIntensity(mtab=m, sample=samples[cn], intensity=s)
-                    if s != '0':
+                    samples_found = True
+                    intensity = float(s)
+                    if intensity != 0:
+                        mi = MtabIntensity(mtab=m, sample=samples[cn], intensity=intensity)
                         # FIXME use association proxy
                         session.add(mi)
-            if mi is None:
-                log('ERROR: all samples missing from metadata, wrong metadata file?')
+            if not samples_found:
+                log('ERROR: all samples missing from metabolite record, wrong metadata file?')
+                log('metabolite record columns (in no particular order): %s' % keys)
                 session.rollback()
                 return
             # add to session
