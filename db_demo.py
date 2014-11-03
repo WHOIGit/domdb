@@ -176,11 +176,11 @@ class Shell(cmd.Cmd):
         try:
             key, value = args.split(' ')
             if key not in self.config:
-                print 'unknown configuration key %s' % key
+                print 'ERROR: unknown parameter %s' % key
             else:
                 self.config[key] = float(value)
         except ValueError:
-            pass
+            print 'ERROR: bad value for %s: "%s"' % (key,value)
         rows = [dict(param=k,value=v) for k,v in self.config.items()]
         for line in asciitable(rows,['param','value']):
             print line
@@ -195,7 +195,11 @@ class Shell(cmd.Cmd):
             print '%d metabolites in experiment %s' % (n, exp)
         session.close()
     def do_add(self,args):
-        exp, path, mdpath = args.split(' ')
+        try:
+            exp, path, mdpath = args.split(' ')
+        except ValueError:
+            print 'ERROR: add takes [exp name] [data file] [metadata file]'
+            return
         if not os.path.exists(path):
             print 'data file %s does not exist' % path
             return
@@ -217,7 +221,11 @@ class Shell(cmd.Cmd):
         try:
             mz, rt = args.split(' ')
         except ValueError:
-            mz, rt, outf = args.split(' ')
+            try:
+                mz, rt, outf = args.split(' ')
+            except ValueError:
+                print 'ERROR: search takes [mz] [rt] [outfile (optional)]'
+                return
         mz = float(mz)
         rt = float(rt)
         fake_exp = Exp(name='N/A')
@@ -228,14 +236,22 @@ class Shell(cmd.Cmd):
         search_out_csv(session,pairs,outf)
         session.close()
     def do_all(self,args):
-        exp, outf = args.split(' ')
+        try:
+            exp, outf = args.split(' ')
+        except ValueError:
+            print 'ERROR: all takes [exp name] [outfile]'
+            return
         session = self.session_factory()
         print 'Searching for matches from %s, please wait ...' % exp
         q = match_all_from(session,exp,ppm_diff=self.config[PPM_DIFF],rt_diff=self.config[RT_DIFF])
         search_out_csv(session,list(q),outf)
         session.close()
     def do_remove(self,args):
-        exp = args.split(' ')[0]
+        try:
+            exp = args.split(' ')[0]
+        except ValueError:
+            print 'ERROR: remove takes [exp name]'
+            return
         print 'Removing all %s data ...' % exp
         session = self.session_factory()
         remove_exp(session,exp)
