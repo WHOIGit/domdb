@@ -31,37 +31,39 @@ def get_session_factory():
 # http://stackoverflow.com/questions/7116038/python-tab-completion-mac-osx-10-7-lion
 import readline
 import rlcompleter
-if readline.__doc__ and 'libedit' in readline.__doc__:
+if not readline.__doc__: # Windows
+	COMPLETE_ABS=False
+elif readline.__doc__ and 'libedit' in readline.__doc__: # MacOS
     readline.parse_and_bind("bind ^I rl_complete")
-    LIBEDIT=True
-else:
+    COMPLETE_ABS=True
+else: # *nix
     readline.parse_and_bind("tab: complete")
-    LIBEDIT=False
+    COMPLETE_ABS=False
 
 # lifting path completion from
 # https://stackoverflow.com/questions/16826172/filename-tab-completion-in-cmd-cmd-of-python
 def _complete_path(text, line):
     arg = line.split()[1:]
     if not arg:
-        completions = os.listdir('./')
+        completions = os.listdir('.'+os.sep)
     else:
-        dir, part, base = arg[-1].rpartition('/')
+        dir, part, base = arg[-1].rpartition(os.sep)
         if part == '':
-            dir = './'
+            dir = '.'+os.sep
         elif dir == '':
-            dir = '/'            
+            dir = os.sep          
         completions = []
         for f in os.listdir(dir):
             if f.startswith(base):
                 cpath = os.path.join(dir,f)
-                if LIBEDIT:
+                if COMPLETE_ABS:
                     addpath = cpath
                 else:
                     addpath = f
                 if os.path.isfile(cpath):
                     completions.append(addpath)
                 else:
-                    completions.append(addpath+'/')
+                    completions.append(addpath+os.sep)
     return completions
 
 # ORM utilities
