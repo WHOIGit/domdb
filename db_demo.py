@@ -1,6 +1,8 @@
 import os
 import sys
 import cmd
+import glob
+import re
 
 import sqlalchemy
 from sqlalchemy import func
@@ -161,6 +163,30 @@ def console_log(message):
 PPM_DIFF='ppm_diff'
 RT_DIFF='rt_diff'
 
+def list_exp_files(dir):
+    """lists all experiments. assumes filenames are in the format
+    {exp_name}_{anything}.csv = data file
+    {exp_name}_{anything including "metadata"}.csv = metadata file
+    converts exp name to lowercase.
+    returns basenames of files (without directory)"""
+    result = {}
+    for fn in glob.glob(os.path.join(dir,'*.csv')):
+        bn = os.path.basename(fn)
+        bnl = bn.lower()
+        name = re.sub('_.*','',bnl)
+        if name not in result:
+            result[name] = {}
+        if bnl.find('metadata') >= 0:
+            result[name]['metadata'] = fn
+        else:
+            result[name]['data'] = fn 
+    for exp,v in result.items():
+        yield {
+            'name': exp,
+            'data': os.path.basename(v['data']),
+            'metadata': os.path.basename(v['metadata'])
+        }
+
 class Shell(cmd.Cmd):
     def __init__(self,session_factory):
         cmd.Cmd.__init__(self)
@@ -200,6 +226,32 @@ class Shell(cmd.Cmd):
             n = mtab_count(session, exp)
             print '%d metabolites in experiment %s' % (n, exp)
         session.close()
+    def do_dir(self, args):
+        dir = args
+        result = list(list_exp_files(dir))
+        print 'found files for %d experiments in %s' % (len(result), dir)
+        for line in asciitable(result,disp_cols=['name','data','metadata']):
+            print line
+    def complete_dir(self, text, line, start_idx, end_idx):
+        return _complete_path(text, line)
+    def do_add_dir(self, args):
+        dir = args
+        result = list(list_exp_files(dir))
+        print 'found files for %d experiments in %s' % (len(result), dir)
+        session = self.session_factory()
+        for d in result:
+            name = d['name']
+            path = os.path.join(dir,d['data'])
+            mdpath = os.path.join(dir,d['metadata'])
+            print 'loading experiment %s from:' % name
+            print '- data file %s' % path
+            print '- metadata file %s' % mdpath
+            etl(session,name,path,mdpath,log=console_log)
+            n = session.query(func.count(Mtab.id)).first()[0]
+            print '%d metabolites in database' % n
+        session.close()
+    def complete_add_dir(self, text, line, start_idx, end_idx):
+        return _complete_path(text, line)
     def do_add(self,args):
         try:
             exp, path, mdpath = args.split(' ')
