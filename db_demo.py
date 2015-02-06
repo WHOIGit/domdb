@@ -105,9 +105,11 @@ def matches_as_csv(session,pairs):
         'mtab_exp', # source mtab experiment name
         'mtab_mz', # source mtab m/z
         'mtab_rt', # source mtab retention time
+        'mtab_annotated', # source mtab annotation
         'match_exp', # matched mtab experiment name
         'match_mz', # matched mtab m/z
         'match_rt', # match mtab retention time
+        'match_annotated', # match mtab annotation
         'sample', # sample / datafile containing matched mtab
         'intensity' # intensity of matched mtab in that sample
     ]
@@ -120,9 +122,11 @@ def matches_as_csv(session,pairs):
                 'mtab_exp': m.exp.name,
                 'mtab_mz': m.mz,
                 'mtab_rt': m.rt,
+                'mtab_annotated': m.annotated,
                 'match_exp': match.exp.name,
                 'match_mz': match.mz,
                 'match_rt': match.rt,
+                'match_annotated': match.annotated,
                 'sample': mi.sample.name,
                 'intensity': mi.intensity
             }
@@ -292,7 +296,7 @@ class Shell(cmd.Cmd):
         mz = float(mz)
         rt = float(rt)
         fake_exp = Exp(name='N/A')
-        fake_mtab = Mtab(rt=rt, mz=mz, exp=fake_exp)
+        fake_mtab = Mtab(rt=rt, mz=mz, exp=fake_exp, annotated='')
         session = self.session_factory()
         q = mtab_search(session,mz,rt,self.config)
         pairs = [(fake_mtab, m) for m in q]

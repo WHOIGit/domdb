@@ -33,7 +33,7 @@ class Mtab(Base):
     adduct = Column(String)
     pcgroup = Column(Integer)
     withMS2 = Column(Integer, default=0)
-    annotated = Column(Integer, default=0)
+    annotated = Column(String, default='')
 
     exp = relationship(Exp, backref=backref('mtabs', cascade='all,delete-orphan'))
 
