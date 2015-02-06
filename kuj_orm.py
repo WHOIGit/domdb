@@ -29,6 +29,11 @@ class Mtab(Base):
     rt = Column(Numeric) # retention time (seconds)
     rtmin = Column(Numeric)
     rtmax = Column(Numeric)
+    isotopes = Column(String)
+    adduct = Column(String)
+    pcgroup = Column(Integer)
+    withMS2 = Column(Integer, default=0)
+    annotated = Column(Integer, default=0)
 
     exp = relationship(Exp, backref=backref('mtabs', cascade='all,delete-orphan'))
 
@@ -65,7 +70,19 @@ class MtabIntensity(Base):
     sample = relationship(Sample, backref=backref('intensities', cascade='all,delete-orphan'))
     mtab = relationship(Mtab, backref=backref('intensities', cascade='all,delete-orphan'))
 
-COMMON_FIELDS=set(['mz','mzmin','mzmax','rt','rtmin','rtmax'])
+COMMON_FIELDS=set([
+    'mz',
+    'mzmin',
+    'mzmax',
+    'rt',
+    'rtmin',
+    'rtmax',
+    'isotopes',
+    'adduct',
+    'pcgroup',
+    'withMS2',
+    'annotated'
+])
 IGNORE='ignore'
 FILE_NAME='File.Name'
 

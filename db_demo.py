@@ -162,6 +162,13 @@ def console_log(message):
 
 PPM_DIFF='ppm_diff'
 RT_DIFF='rt_diff'
+WITH_MS2='with_ms2'
+
+CONFIG_TYPES={
+    PPM_DIFF: float,
+    RT_DIFF: float,
+    WITH_MS2: bool
+}
 
 def list_exp_files(dir):
     """lists all experiments. assumes filenames are in the format
@@ -194,7 +201,8 @@ class Shell(cmd.Cmd):
         self.do_count('')
         self.config = {
             PPM_DIFF: 0.5,
-            RT_DIFF: 30
+            RT_DIFF: 30,
+            WITH_MS2: False
         }
     def do_list(self,args):
         session = self.session_factory()
@@ -207,7 +215,11 @@ class Shell(cmd.Cmd):
                 print 'ERROR: unknown parameter %s' % key
             else:
                 try:
-                    self.config[key] = float(value)
+                    if CONFIG_TYPES[key]==bool:
+                        self.config[key] = value in ['True','true','1','Yes','yes','Y','y']
+                    else:
+                        self.config[key] = CONFIG_TYPES[key](value)
+                    print 'set %s to %s' % (key, self.config[key])
                 except ValueError:
                     print 'ERROR: bad value for %s: "%s"' % (key,value)
                     return
