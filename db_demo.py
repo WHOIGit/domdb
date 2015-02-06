@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
 from kuj_orm import etl, mtab_search, mtab_random, match_all_from, match_one, remove_exp
+from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, default_config
 
 from utils import asciitable
 
@@ -160,10 +161,6 @@ def search_out_csv(session,matches,outf=None):
 def console_log(message):
     print message
 
-PPM_DIFF='ppm_diff'
-RT_DIFF='rt_diff'
-WITH_MS2='with_ms2'
-
 CONFIG_TYPES={
     PPM_DIFF: float,
     RT_DIFF: float,
@@ -199,11 +196,7 @@ class Shell(cmd.Cmd):
         cmd.Cmd.__init__(self)
         self.session_factory = session_factory
         self.do_count('')
-        self.config = {
-            PPM_DIFF: 0.5,
-            RT_DIFF: 30,
-            WITH_MS2: False
-        }
+        self.config = default_config()
     def do_list(self,args):
         session = self.session_factory()
         list_exps(session)
@@ -216,7 +209,7 @@ class Shell(cmd.Cmd):
             else:
                 try:
                     if CONFIG_TYPES[key]==bool:
-                        self.config[key] = value in ['True','true','1','Yes','yes','Y','y']
+                        self.config[key] = value in ['True','true','T','t','1','Yes','yes','Y','y']
                     else:
                         self.config[key] = CONFIG_TYPES[key](value)
                     print 'set %s to %s' % (key, self.config[key])
@@ -301,7 +294,7 @@ class Shell(cmd.Cmd):
         fake_exp = Exp(name='N/A')
         fake_mtab = Mtab(rt=rt, mz=mz, exp=fake_exp)
         session = self.session_factory()
-        q = mtab_search(session,mz,rt,ppm_diff=self.config[PPM_DIFF],rt_diff=self.config[RT_DIFF])
+        q = mtab_search(session,mz,rt,self.config)
         pairs = [(fake_mtab, m) for m in q]
         search_out_csv(session,pairs,outf)
         session.close()
@@ -313,7 +306,7 @@ class Shell(cmd.Cmd):
             return
         session = self.session_factory()
         print 'Searching for matches from %s, please wait ...' % exp
-        q = match_all_from(session,exp,ppm_diff=self.config[PPM_DIFF],rt_diff=self.config[RT_DIFF])
+        q = match_all_from(session,exp,self.config)
         search_out_csv(session,list(q),outf)
         session.close()
     def do_remove(self,args):
@@ -333,7 +326,7 @@ class Shell(cmd.Cmd):
         print 'Randomly matching metabolites...'
         while True:
             mtab = mtab_random(session)
-            ms = list(match_one(session,mtab))
+            ms = list(match_one(session,mtab,self.config))
             if ms:
                 print '%s matched the following:' % mtab
                 for m in ms:

@@ -38,7 +38,11 @@ class Mtab(Base):
     exp = relationship(Exp, backref=backref('mtabs', cascade='all,delete-orphan'))
 
     def __repr__(self):
-        return '<Metabolite %s %s %s>' % (self.exp.name, str(self.mz), str(self.rt))
+        if self.withMS2==1:
+            ms2 = 'with MS2'
+        else:
+            ms2 = 'no MS2'
+        return '<Metabolite %s %s %s (%s)>' % (self.exp.name, str(self.mz), str(self.rt), ms2)
 
 class Sample(Base):
     __tablename__ = 'sample'
@@ -153,6 +157,17 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     session.commit()
     log('loaded %d total metabolites' % n)
 
+PPM_DIFF='ppm_diff'
+RT_DIFF='rt_diff'
+WITH_MS2='with_ms2'
+
+def default_config():
+    return {
+        PPM_DIFF: 0.5,
+        RT_DIFF: 30,
+        WITH_MS2: False
+    }
+
 def remove_exp(session,exp):
     # FIXME cascading ORM delete should make this unnecessary
     session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
@@ -161,40 +176,52 @@ def remove_exp(session,exp):
     session.commit()
     session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
     session.commit()
-    
-def match_all_from(session,exp,ppm_diff=0.5,rt_diff=30):
+
+def withms2_min(config):
+    if config[WITH_MS2]:
+        return 1
+    else:
+        return 0
+
+def match_all_from(session,exp,config=default_config()):
     m_alias = aliased(Mtab)
     for row in session.query(Mtab, m_alias).\
         filter(Mtab.exp.has(name=exp)).\
+        filter(Mtab.withMS2 >= withms2_min(config)).\
         join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_id != m_alias.exp_id))).\
-        filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff).\
-        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
+        filter(m_alias.withMS2 >= withms2_min(config)).\
+        filter(func.abs(Mtab.rt - m_alias.rt) <= config[RT_DIFF]).\
+        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= config[PPM_DIFF]).\
         join((Exp, Exp.id==m_alias.exp_id)).\
         order_by(Mtab.mz, Exp.name).\
         all():
         yield row
 
-def match_all(session,ppm_diff=0.5,rt_diff=30):
+def match_all(session,config=default_config()):
     m_alias = aliased(Mtab)
     for row in session.query(Mtab, m_alias).\
+        filter(Mtab.withMS2 >= withms2_min(config)).\
         join((m_alias, Mtab.id != m_alias.id)).\
-        filter(func.abs(Mtab.rt - m_alias.rt) <= rt_diff).\
-        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= ppm_diff).\
+        filter(m_alias.withMS2 >= withms2_min(config)).\
+        filter(func.abs(Mtab.rt - m_alias.rt) <= config[RT_DIFF]).\
+        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= config[PPM_DIFF]).\
         all():
         yield row
 
-def match_one(session,m,ppm_diff=0.5,rt_diff=30):
+def match_one(session,m,config=default_config()):
     for row in session.query(Mtab).\
         filter(Mtab.id != m.id).\
-        filter(func.abs(Mtab.rt - m.rt) <= rt_diff).\
-        filter(func.abs(1e6 * (Mtab.mz - m.mz) / m.mz) <= ppm_diff).\
+        filter(Mtab.withMS2 >= withms2_min(config)).\
+        filter(func.abs(Mtab.rt - m.rt) <= config[RT_DIFF]).\
+        filter(func.abs(1e6 * (Mtab.mz - m.mz) / m.mz) <= config[PPM_DIFF]).\
         all():
         yield row
 
-def mtab_search(session,mz,rt,ppm_diff=0.5,rt_diff=30):
+def mtab_search(session,mz,rt,config=default_config()):
     for m in session.query(Mtab).\
-        filter(func.abs(1e6 * (mz - Mtab.mz) / Mtab.mz) <= ppm_diff).\
-        filter(func.abs(rt - Mtab.rt) <= rt_diff):
+        filter(Mtab.withMS2 >= withms2_min(config)).\
+        filter(func.abs(1e6 * (mz - Mtab.mz) / Mtab.mz) <= config[PPM_DIFF]).\
+        filter(func.abs(rt - Mtab.rt) <= config[RT_DIFF]):
         yield m
 
 def mtab_random(session):
