@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
-from kuj_orm import etl, mtab_search, mtab_random, match_all_from, match_one, remove_exp
+from kuj_orm import etl, mtab_search, mtab_random, match_all_from, match_one, remove_exp, mtab_dist
 from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, default_config
 
 from utils import asciitable
@@ -340,6 +340,12 @@ class Shell(cmd.Cmd):
     def do_random(self,args):
         session = self.session_factory()
         print mtab_random(session)
+        session.close()
+    def do_pdf(self,args):
+        session = self.session_factory()
+        pdf = mtab_dist(session,4000)
+        for k in sorted(pdf.keys()):
+            print '%d: %d' % (k, pdf[k])
         session.close()
     def do_exit(self,args):
         sys.exit(0)

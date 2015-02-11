@@ -226,3 +226,17 @@ def mtab_search(session,mz,rt,config=default_config()):
 
 def mtab_random(session):
     return session.query(Mtab).order_by(func.random()).limit(1)[0]
+
+def mtab_dist(session,n=1000,config=default_config()):
+    pdf = {}
+    for i in range(n):
+        mtab = mtab_random(session)
+        n_ms = len(list(match_one(session,mtab,config))) + 1
+        if n_ms > 1:
+            print mtab, n_ms
+        if n_ms not in pdf:
+            pdf[n_ms] = 1
+        else:
+            pdf[n_ms] = pdf[n_ms] + 1
+    return pdf
+        
