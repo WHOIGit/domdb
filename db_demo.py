@@ -10,7 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
-from kuj_orm import etl, mtab_search, mtab_random, match_all_from, match_one, remove_exp, mtab_dist
+#from kuj_orm import etl, Db, mtab_search, mtab_random, match_all_from, match_one, remove_exp, mtab_dist
+from kuj_orm import etl, DomDb
 from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, default_config
 
 from utils import asciitable
@@ -70,12 +71,6 @@ def _complete_path(text, line):
     return completions
 
 # ORM utilities
-
-def mtab_count(session,exp=None):
-    q = session.query(func.count(Mtab.id))
-    if exp is not None:
-        q = q.filter(Mtab.exp.has(name=exp))
-    return q.first()[0]
 
 def list_exps(session):
     def q():
@@ -199,8 +194,8 @@ class Shell(cmd.Cmd):
     def __init__(self,session_factory):
         cmd.Cmd.__init__(self)
         self.session_factory = session_factory
-        self.do_count('')
         self.config = default_config()
+        self.do_count('')
     def do_list(self,args):
         session = self.session_factory()
         list_exps(session)
@@ -226,15 +221,14 @@ class Shell(cmd.Cmd):
         for line in asciitable(rows,['param','value']):
             print line
     def do_count(self,args):
-        session = self.session_factory()
-        if not args:
-            n = mtab_count(session)
-            print '%d metabolites in database' % n
-        else:
-            exp = args.split(' ')[0]
-            n = mtab_count(session, exp)
-            print '%d metabolites in experiment %s' % (n, exp)
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            if not args:
+                n = domdb.mtab_count()
+                print '%d metabolites in database' % n
+            else:
+                exp = args.split(' ')[0]
+                n = domdb.mtab_count(exp)
+                print '%d metabolites in experiment %s' % (n, exp)
     def do_dir(self, args):
         dir = args
         result = list(list_exp_files(dir))
@@ -297,22 +291,20 @@ class Shell(cmd.Cmd):
         rt = float(rt)
         fake_exp = Exp(name='N/A')
         fake_mtab = Mtab(rt=rt, mz=mz, exp=fake_exp, annotated='')
-        session = self.session_factory()
-        q = mtab_search(session,mz,rt,self.config)
-        pairs = [(fake_mtab, m) for m in q]
-        search_out_csv(session,pairs,outf)
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            q = domdb.mtab_search(mz,rt)
+            pairs = [(fake_mtab, m) for m in q]
+            search_out_csv(session,pairs,outf)
     def do_all(self,args):
         try:
             exp, outf = args.split(' ')
         except ValueError:
             print 'ERROR: all takes [exp name] [outfile]'
             return
-        session = self.session_factory()
         print 'Searching for matches from %s, please wait ...' % exp
-        q = match_all_from(session,exp,self.config)
-        search_out_csv(session,list(q),outf)
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            q = domdb.match_all_from(exp)
+            search_out_csv(domdb.session,list(q),outf)
     def do_remove(self,args):
         try:
             exp = args.split(' ')[0]
@@ -320,33 +312,29 @@ class Shell(cmd.Cmd):
             print 'ERROR: remove takes [exp name]'
             return
         print 'Removing all %s data ...' % exp
-        session = self.session_factory()
-        remove_exp(session,exp)
-        session.expire_all() # FIXME redundant?
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            domdb.remove_exp()
+            remove_exp(session,exp)
         self.do_list('')
     def do_test(self,args):
-        session = self.session_factory()
-        print 'Randomly matching metabolites...'
-        while True:
-            mtab = mtab_random(session)
-            ms = list(match_one(session,mtab,self.config))
-            if ms:
-                print '%s matched the following:' % mtab
-                for m in ms:
-                    print '* %s' % m
-                break
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            print 'Randomly matching metabolites...'
+            while True:
+                mtab = domdb.mtab_random()
+                ms = list(domdb.match_one(mtab))
+                if ms:
+                    print '%s matched the following:' % mtab
+                    for m in ms:
+                        print '* %s' % m
+                    break
     def do_random(self,args):
-        session = self.session_factory()
-        print mtab_random(session)
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            print domdb.mtab_random()
     def do_pdf(self,args):
-        session = self.session_factory()
-        pdf = mtab_dist(session,4000)
-        for k in sorted(pdf.keys()):
-            print '%d: %d' % (k, pdf[k])
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            pdf = domdb.mtab_dist(4000)
+            for k in sorted(pdf.keys()):
+                print '%d: %d' % (k, pdf[k])
     def do_exit(self,args):
         sys.exit(0)
     def do_quit(self,args):
