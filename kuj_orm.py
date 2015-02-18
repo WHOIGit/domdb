@@ -1,6 +1,9 @@
 import os
+import sys
 import csv
 import json
+from contextlib import contextmanager
+import traceback
 
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
@@ -168,75 +171,89 @@ def default_config():
         WITH_MS2: False
     }
 
-def remove_exp(session,exp):
-    # FIXME cascading ORM delete should make this unnecessary
-    session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
-    session.commit()
-    session.query(Sample).filter(Sample.exp.has(name=exp)).delete(synchronize_session='fetch')
-    session.commit()
-    session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
-    session.commit()
-
 def withms2_min(config):
     if config[WITH_MS2]:
         return 1
     else:
         return 0
 
-def match_all_from(session,exp,config=default_config()):
-    m_alias = aliased(Mtab)
-    for row in session.query(Mtab, m_alias).\
-        filter(Mtab.exp.has(name=exp)).\
-        filter(Mtab.withMS2 >= withms2_min(config)).\
-        join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_id != m_alias.exp_id))).\
-        filter(m_alias.withMS2 >= withms2_min(config)).\
-        filter(func.abs(Mtab.rt - m_alias.rt) <= config[RT_DIFF]).\
-        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= config[PPM_DIFF]).\
-        join((Exp, Exp.id==m_alias.exp_id)).\
-        order_by(Mtab.mz, Exp.name).\
-        all():
-        yield row
+class Db(object):
+    def __init__(self, session, config=default_config()):
+        self.session = session
+        self.config = config
+    def remove_exp(self,exp):
+        # FIXME cascading ORM delete should make this unnecessary
+        self.session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
+        self.session.commit()
+        self.session.query(Sample).filter(Sample.exp.has(name=exp)).delete(synchronize_session='fetch')
+        self.session.commit()
+        self.session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
+        self.session.commit()
+    def mtab_count(self,exp=None):
+        q = self.session.query(func.count(Mtab.id))
+        if exp is not None:
+            q = q.filter(Mtab.exp.has(name=exp))
+        return q.first()[0]
+    def match_all_from(self,exp):
+        m_alias = aliased(Mtab)
+        for row in self.session.query(Mtab, m_alias).\
+            filter(Mtab.exp.has(name=exp)).\
+            filter(Mtab.withMS2 >= withms2_min(self.config)).\
+            join((m_alias, and_(Mtab.id != m_alias.id, Mtab.exp_id != m_alias.exp_id))).\
+            filter(m_alias.withMS2 >= withms2_min(self.config)).\
+            filter(func.abs(Mtab.rt - m_alias.rt) <= self.config[RT_DIFF]).\
+            filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= self.config[PPM_DIFF]).\
+            join((Exp, Exp.id==m_alias.exp_id)).\
+            order_by(Mtab.mz, Exp.name).\
+            all():
+            yield row
+    def match_all(self):
+        m_alias = aliased(Mtab)
+        for row in self.session.query(Mtab, m_alias).\
+            filter(Mtab.withMS2 >= withms2_min(self.config)).\
+            join((m_alias, Mtab.id != m_alias.id)).\
+            filter(m_alias.withMS2 >= withms2_min(self.config)).\
+            filter(func.abs(Mtab.rt - m_alias.rt) <= self.config[RT_DIFF]).\
+            filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= self.config[PPM_DIFF]).\
+            all():
+            yield row
+    def match_one(self,m):
+        for row in self.session.query(Mtab).\
+            filter(Mtab.id != m.id).\
+            filter(Mtab.withMS2 >= withms2_min(self.config)).\
+            filter(func.abs(Mtab.rt - m.rt) <= self.config[RT_DIFF]).\
+            filter(func.abs(1e6 * (Mtab.mz - m.mz) / m.mz) <= self.config[PPM_DIFF]).\
+            all():
+            yield row
+    def mtab_search(self,mz,rt):
+        for m in self.session.query(Mtab).\
+            filter(Mtab.withMS2 >= withms2_min(self.config)).\
+            filter(func.abs(1e6 * (mz - Mtab.mz) / Mtab.mz) <= self.config[PPM_DIFF]).\
+            filter(func.abs(rt - Mtab.rt) <= self.config[RT_DIFF]):
+            yield m
+    def mtab_random(self):
+        return self.session.query(Mtab).order_by(func.random()).limit(1)[0]
+    def mtab_dist(self,n=1000):
+        pdf = {}
+        for i in range(n):
+            mtab = self.mtab_random()
+            n_ms = len(list(self.match_one(mtab))) + 1
+            if n_ms > 1:
+                print mtab, n_ms
+            if n_ms not in pdf:
+                pdf[n_ms] = 1
+            else:
+                pdf[n_ms] = pdf[n_ms] + 1
+        return pdf
 
-def match_all(session,config=default_config()):
-    m_alias = aliased(Mtab)
-    for row in session.query(Mtab, m_alias).\
-        filter(Mtab.withMS2 >= withms2_min(config)).\
-        join((m_alias, Mtab.id != m_alias.id)).\
-        filter(m_alias.withMS2 >= withms2_min(config)).\
-        filter(func.abs(Mtab.rt - m_alias.rt) <= config[RT_DIFF]).\
-        filter(func.abs(1e6 * (Mtab.mz - m_alias.mz) / m_alias.mz) <= config[PPM_DIFF]).\
-        all():
-        yield row
+@contextmanager
+def DomDb(sessionfactory,config=default_config()):
+    try:
+        session = sessionfactory()
+        yield Db(session, config)
+    except:
+        print 'Error running command:'
+        traceback.print_exc(file=sys.stdout)
+    finally:
+        session.close()
 
-def match_one(session,m,config=default_config()):
-    for row in session.query(Mtab).\
-        filter(Mtab.id != m.id).\
-        filter(Mtab.withMS2 >= withms2_min(config)).\
-        filter(func.abs(Mtab.rt - m.rt) <= config[RT_DIFF]).\
-        filter(func.abs(1e6 * (Mtab.mz - m.mz) / m.mz) <= config[PPM_DIFF]).\
-        all():
-        yield row
-
-def mtab_search(session,mz,rt,config=default_config()):
-    for m in session.query(Mtab).\
-        filter(Mtab.withMS2 >= withms2_min(config)).\
-        filter(func.abs(1e6 * (mz - Mtab.mz) / Mtab.mz) <= config[PPM_DIFF]).\
-        filter(func.abs(rt - Mtab.rt) <= config[RT_DIFF]):
-        yield m
-
-def mtab_random(session):
-    return session.query(Mtab).order_by(func.random()).limit(1)[0]
-
-def mtab_dist(session,n=1000,config=default_config()):
-    pdf = {}
-    for i in range(n):
-        mtab = mtab_random(session)
-        n_ms = len(list(match_one(session,mtab,config))) + 1
-        if n_ms > 1:
-            print mtab, n_ms
-        if n_ms not in pdf:
-            pdf[n_ms] = 1
-        else:
-            pdf[n_ms] = pdf[n_ms] + 1
-    return pdf
-        
