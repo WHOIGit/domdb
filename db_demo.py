@@ -184,11 +184,12 @@ def list_exp_files(dir):
         else:
             result[name]['data'] = fn 
     for exp,v in result.items():
-        yield {
-            'name': exp,
-            'data': os.path.basename(v['data']),
-            'metadata': os.path.basename(v['metadata'])
-        }
+        if 'data' in v and 'metadata' in v:
+            yield {
+                'name': exp,
+                'data': os.path.basename(v['data']),
+                'metadata': os.path.basename(v['metadata'])
+                }
 
 class Shell(cmd.Cmd):
     def __init__(self,session_factory):
@@ -241,18 +242,17 @@ class Shell(cmd.Cmd):
         dir = args
         result = list(list_exp_files(dir))
         print 'found files for %d experiments in %s' % (len(result), dir)
-        session = self.session_factory()
-        for d in result:
-            name = d['name']
-            path = os.path.join(dir,d['data'])
-            mdpath = os.path.join(dir,d['metadata'])
-            print 'loading experiment %s from:' % name
-            print '- data file %s' % path
-            print '- metadata file %s' % mdpath
-            etl(session,name,path,mdpath,log=console_log)
-            n = session.query(func.count(Mtab.id)).first()[0]
-            print '%d metabolites in database' % n
-        session.close()
+        with DomDb(self.session_factory, self.config) as domdb:
+            for d in result:
+                name = d['name']
+                path = os.path.join(dir,d['data'])
+                mdpath = os.path.join(dir,d['metadata'])
+                print 'loading experiment %s from:' % name
+                print '- data file %s' % path
+                print '- metadata file %s' % mdpath
+                etl(domdb.session,name,path,mdpath,log=console_log)
+                n = domdb.session.query(func.count(Mtab.id)).first()[0]
+                print '%d metabolites in database' % n
     def complete_add_dir(self, text, line, start_idx, end_idx):
         return _complete_path(text, line)
     def do_add(self,args):

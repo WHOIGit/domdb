@@ -1,7 +1,9 @@
 import os
+import sys
 import csv
 import json
 from contextlib import contextmanager
+import traceback
 
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
@@ -249,6 +251,9 @@ def DomDb(sessionfactory,config=default_config()):
     try:
         session = sessionfactory()
         yield Db(session, config)
+    except:
+        print 'Error running command:'
+        traceback.print_exc(file=sys.stdout)
     finally:
         session.close()
 
