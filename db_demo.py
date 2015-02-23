@@ -296,7 +296,7 @@ class Shell(cmd.Cmd):
         with DomDb(self.session_factory, self.config) as domdb:
             q = domdb.mtab_search(mz,rt)
             pairs = [(fake_mtab, m) for m in q]
-            search_out_csv(session,pairs,outf)
+            search_out_csv(domdb.session,pairs,outf)
     def do_all(self,args):
         try:
             exp, outf = args.split(' ')
