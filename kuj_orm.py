@@ -52,6 +52,7 @@ class Sample(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
+    control = Column(Boolean)
     exp_id = Column(Integer, ForeignKey('experiment.id'))
 
     exp = relationship(Exp, backref=backref('samples', cascade='all,delete-orphan'))
@@ -91,6 +92,7 @@ COMMON_FIELDS=set([
     'annotated'
 ])
 IGNORE='ignore'
+CONTROL='control'
 FILE_NAME='File.Name'
 
 def etl(session, exp_name, df_path, mdf_path, log=None):
@@ -106,6 +108,7 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     # first, do sample metadata for this experiment
     samples = {}
     ignored = 0
+    required_sample_attrs = [FILE_NAME, CONTROL]
     with open(mdf_path) as cf:
         log('loading %s metadata from %s' % (exp_name, mdf_path))
         for d in csv.DictReader(cf):
@@ -113,13 +116,14 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
                 ignored += 1
                 continue # skip this sample
             name = d[FILE_NAME]
-            sample = Sample(name=name)
+            control = d[CONTROL]==1
+            sample = Sample(name=name,control=control)
             samples[name] = sample
             sample.exp = exp
             session.add(sample)
             # now add addrs
             for k,v in d.items():
-                if k != FILE_NAME:
+                if k not in required_sample_attrs:
                     attr = SampleAttr(sample=sample, name=k, value=v)
                     session.add(attr) # FIXME use association proxy
     log('%d total samples loaded, %d ignored' % (len(samples), ignored))
