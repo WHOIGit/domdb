@@ -52,7 +52,7 @@ class Sample(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    control = Column(Boolean)
+    control = Column(Integer)
     exp_id = Column(Integer, ForeignKey('experiment.id'))
 
     exp = relationship(Exp, backref=backref('samples', cascade='all,delete-orphan'))
@@ -116,7 +116,7 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
                 ignored += 1
                 continue # skip this sample
             name = d[FILE_NAME]
-            control = d[CONTROL]==1
+            control = int(d[CONTROL]) # 1 is True, 0 is False
             sample = Sample(name=name,control=control)
             samples[name] = sample
             sample.exp = exp

@@ -106,7 +106,8 @@ def matches_as_csv(session,pairs):
         'match_rt', # match mtab retention time
         'match_annotated', # match mtab annotation
         'sample', # sample / datafile containing matched mtab
-        'intensity' # intensity of matched mtab in that sample
+        'intensity', # intensity of matched mtab in that sample
+        'control' # is that sample a control sample
     ]
     for m, match in pairs:
         # get metadata for matching metabolite
@@ -123,7 +124,8 @@ def matches_as_csv(session,pairs):
                 'match_rt': match.rt,
                 'match_annotated': match.annotated,
                 'sample': mi.sample.name,
-                'intensity': mi.intensity
+                'intensity': mi.intensity,
+                'control': mi.sample.control
             }
             # now populate variable (per experiment) schema
             for attr in mi.sample.attrs:
