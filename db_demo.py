@@ -93,7 +93,7 @@ def avoid_name_collisions(name,schema):
         n += 1
     return newname
 
-def matches_as_csv(session,pairs):
+def matches_as_csv(pairs):
     out_recs = []
     # fixed schema
     out_schema = [
@@ -111,8 +111,7 @@ def matches_as_csv(session,pairs):
     ]
     for m, match in pairs:
         # get metadata for matching metabolite
-        for mi in session.query(MtabIntensity).\
-            filter(MtabIntensity.mtab_id==match.id):
+        for mi in match.intensities:
             # populate fixed schema
             out_rec = {
                 'mtab_exp': m.exp.name,
@@ -142,12 +141,12 @@ def matches_as_csv(session,pairs):
         out_row = [rec.get(k,'') for k in out_schema]
         yield ','.join(map(str,out_row)) # FIXME format numbers better
 
-def search_out_csv(session,matches,outf=None):
+def search_out_csv(matches,outf=None):
     if not matches:
         print 'No matches found'
         return
     print 'Found %d matches' % len(matches)
-    outlines = matches_as_csv(session,matches)
+    outlines = matches_as_csv(matches)
     if outf is not None:
         with open(outf,'w') as fout:
             print 'Saving results to %s ...' % outf
@@ -296,7 +295,7 @@ class Shell(cmd.Cmd):
         with DomDb(self.session_factory, self.config) as domdb:
             q = domdb.mtab_search(mz,rt)
             pairs = [(fake_mtab, m) for m in q]
-            search_out_csv(domdb.session,pairs,outf)
+            search_out_csv(pairs,outf)
     def do_all(self,args):
         try:
             exp, outf = args.split(' ')
@@ -306,7 +305,7 @@ class Shell(cmd.Cmd):
         print 'Searching for matches from %s, please wait ...' % exp
         with DomDb(self.session_factory, self.config) as domdb:
             q = domdb.match_all_from(exp)
-            search_out_csv(domdb.session,list(q),outf)
+            search_out_csv(list(q),outf)
     def do_remove(self,args):
         try:
             exp = args.split(' ')[0]
