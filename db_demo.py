@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
 from kuj_orm import etl, DomDb
-from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, default_config
+from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, EXCLUDE_CONTROLS, INT_OVER_CONTROLS, default_config
 
 from utils import asciitable
 
@@ -84,33 +84,14 @@ def list_exps(session):
     for line in asciitable(list(q()),['name','samples','metabolites'],'Database is empty'):
         print line
 
-def avoid_name_collisions(name,schema):
-    n = 1
-    newname = name
-    while newname in schema:
-        newname = '%s_%d' % (name, n)
-        n += 1
-    return newname
-
-def matches_as_csv(pairs):
-    out_recs = []
-    # fixed schema
-    out_schema = [
-        'mtab_exp', # source mtab experiment name
-        'mtab_mz', # source mtab m/z
-        'mtab_rt', # source mtab retention time
-        'mtab_annotated', # source mtab annotation
-        'match_exp', # matched mtab experiment name
-        'match_mz', # matched mtab m/z
-        'match_rt', # match mtab retention time
-        'match_annotated', # match mtab annotation
-        'sample', # sample / datafile containing matched mtab
-        'intensity', # intensity of matched mtab in that sample
-        'control' # is that sample a control sample
-    ]
+def matches_as_csv(pairs,exclude_controls=False,int_over_controls=0):
     for m, match in pairs:
         # get metadata for matching metabolite
         for mi in match.intensities:
+            if exclude_controls and mi.sample.control==1:
+                continue
+            if mi.intensity <= match.avg_int_controls * int_over_controls:
+                continue
             # populate fixed schema
             out_rec = {
                 'mtab_exp': m.exp.name,
@@ -140,12 +121,12 @@ def matches_as_csv(pairs):
         out_row = [rec.get(k,'') for k in out_schema]
         yield ','.join(map(str,out_row)) # FIXME format numbers better
 
-def search_out_csv(matches,outf=None):
+def search_out_csv(db,matches,outf=None):
     if not matches:
         print 'No matches found'
         return
     print 'Found %d matches' % len(matches)
-    outlines = matches_as_csv(matches)
+    outlines = db.matches_as_csv(matches)
     if outf is not None:
         with open(outf,'w') as fout:
             print 'Saving results to %s ...' % outf
@@ -163,7 +144,9 @@ def console_log(message):
 CONFIG_TYPES={
     PPM_DIFF: float,
     RT_DIFF: float,
-    WITH_MS2: bool
+    WITH_MS2: bool,
+    EXCLUDE_CONTROLS: bool,
+    INT_OVER_CONTROLS: float
 }
 
 def list_exp_files(dir):
@@ -294,7 +277,7 @@ class Shell(cmd.Cmd):
         with DomDb(self.session_factory, self.config) as domdb:
             q = domdb.mtab_search(mz,rt)
             pairs = [(fake_mtab, m) for m in q]
-            search_out_csv(pairs,outf)
+            search_out_csv(domdb,pairs,outf)
     def do_all(self,args):
         try:
             exp, outf = args.split(' ')
@@ -304,7 +287,7 @@ class Shell(cmd.Cmd):
         print 'Searching for matches from %s, please wait ...' % exp
         with DomDb(self.session_factory, self.config) as domdb:
             q = domdb.match_all_from(exp)
-            search_out_csv(list(q),outf)
+            search_out_csv(domdb,list(q),outf)
     def do_remove(self,args):
         try:
             exp = args.split(' ')[0]

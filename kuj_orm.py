@@ -202,15 +202,28 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     session.commit()
     log('loaded %d total metabolites' % n)
 
+# util
+def avoid_name_collisions(name,schema):
+    n = 1
+    newname = name
+    while newname in schema:
+        newname = '%s_%d' % (name, n)
+        n += 1
+    return newname
+
 PPM_DIFF='ppm_diff'
 RT_DIFF='rt_diff'
 WITH_MS2='with_ms2'
+EXCLUDE_CONTROLS='exclude_controls'
+INT_OVER_CONTROLS='int_over_controls'
 
 def default_config():
     return {
         PPM_DIFF: 0.5,
         RT_DIFF: 30,
-        WITH_MS2: False
+        WITH_MS2: False,
+        EXCLUDE_CONTROLS: True,
+        INT_OVER_CONTROLS: 0
     }
 
 def withms2_min(config):
@@ -275,6 +288,58 @@ class Db(object):
             yield m
     def mtab_random(self):
         return self.session.query(Mtab).order_by(func.random()).limit(1)[0]
+    def matches_as_csv(self,pairs):
+        exclude_controls = self.config[EXCLUDE_CONTROLS]
+        int_over_controls = self.config[INT_OVER_CONTROLS]
+        out_recs = []
+        # fixed schema
+        out_schema = [
+            'mtab_exp', # source mtab experiment name
+            'mtab_mz', # source mtab m/z
+            'mtab_rt', # source mtab retention time
+            'mtab_annotated', # source mtab annotation
+            'match_exp', # matched mtab experiment name
+            'match_mz', # matched mtab m/z
+            'match_rt', # match mtab retention time
+            'match_annotated', # match mtab annotation
+            'sample', # sample / datafile containing matched mtab
+            'intensity', # intensity of matched mtab in that sample
+            'control' # is that sample a control sample
+        ]
+        for m, match in pairs:
+            for mi in match.intensities:
+                if exclude_controls and mi.sample.control==1:
+                    continue
+                if mi.intensity <= match.avg_int_controls * int_over_controls:
+                    continue
+                # populate fixed schema
+                out_rec = {
+                    'mtab_exp': m.exp.name,
+                    'mtab_mz': m.mz,
+                    'mtab_rt': m.rt,
+                    'mtab_annotated': m.annotated,
+                    'match_exp': match.exp.name,
+                    'match_mz': match.mz,
+                    'match_rt': match.rt,
+                    'match_annotated': match.annotated,
+                    'sample': mi.sample.name,
+                    'intensity': mi.intensity,
+                    'control': mi.sample.control
+                }
+                # now populate variable (per experiment) schema
+                for attr in mi.sample.attrs:
+                    # avoid collisions of attr names
+                    attrname = avoid_name_collisions(attr.name, out_rec)
+                    out_rec[attrname] = attr.value
+                    if attrname not in out_schema: # keep track of all attributes we find
+                        out_schema.append(attrname)
+                out_recs.append(out_rec) # save record
+        # now we have all the output records in hand
+        # format the output records according to the accumulated union schema
+        yield ','.join(out_schema)
+        for rec in out_recs:
+            out_row = [rec.get(k,'') for k in out_schema]
+            yield ','.join(map(str,out_row)) # FIXME format numbers better
     def ctest(self):
         mtab = self.mtab_random()
         print mtab
