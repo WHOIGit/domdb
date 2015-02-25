@@ -35,7 +35,7 @@ def get_session_factory():
 import readline
 import rlcompleter
 if not readline.__doc__: # Windows
-	COMPLETE_ABS=False
+    COMPLETE_ABS=False
 elif readline.__doc__ and 'libedit' in readline.__doc__: # MacOS
     readline.parse_and_bind("bind ^I rl_complete")
     COMPLETE_ABS=True
@@ -140,6 +140,7 @@ def list_exp_files(dir):
 class Shell(cmd.Cmd):
     def __init__(self,session_factory):
         cmd.Cmd.__init__(self)
+        self.prompt = 'domdb> '
         self.session_factory = session_factory
         self.config = default_config()
         self.do_count('')
