@@ -6,9 +6,10 @@ from contextlib import contextmanager
 import traceback
 
 import sqlalchemy
+from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric, func, and_
-from sqlalchemy.orm import sessionmaker, relationship, backref, aliased
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric, func, and_, func, select
+from sqlalchemy.orm import sessionmaker, relationship, backref, aliased, column_property
 from sqlalchemy.types import PickleType
 
 Base = declarative_base()
@@ -38,6 +39,9 @@ class Mtab(Base):
     withMS2 = Column(Integer, default=0)
     annotated = Column(String, default='')
 
+    avg_int_controls = Column(Numeric,default=0)
+    avg_int_samples = Column(Numeric,default=0)
+
     exp = relationship(Exp, backref=backref('mtabs', cascade='all,delete-orphan'))
 
     def __repr__(self):
@@ -45,7 +49,7 @@ class Mtab(Base):
             ms2 = 'with MS2'
         else:
             ms2 = 'no MS2'
-        return '<Metabolite %s %s %s (%s)>' % (self.exp.name, str(self.mz), str(self.rt), ms2)
+        return '<Metabolite #%d %s %s %s (%s)>' % (self.id, self.exp.name, str(self.mz), str(self.rt), ms2)
 
 class Sample(Base):
     __tablename__ = 'sample'
@@ -77,6 +81,27 @@ class MtabIntensity(Base):
 
     sample = relationship(Sample, backref=backref('intensities', cascade='all,delete-orphan'))
     mtab = relationship(Mtab, backref=backref('intensities', cascade='all,delete-orphan'))
+
+# the following two implementations are for reference;
+# they are slow and so are precomputed during etl instead
+"""
+# "average intensity in controls" attribute of Mtab
+Mtab.avg_int_controls = column_property(
+    select([coalesce(func.avg(MtabIntensity.intensity),0)],\
+           and_(
+               MtabIntensity.mtab_id==Mtab.id,
+               Sample.id==MtabIntensity.sample_id,
+               Sample.control==1
+           )))
+# "average intensity in samples" attribute of Mtab
+Mtab.avg_int_samples = column_property(
+    select([coalesce(func.avg(MtabIntensity.intensity),0)],\
+           and_(
+               MtabIntensity.mtab_id==Mtab.id,
+               Sample.id==MtabIntensity.sample_id,
+               Sample.control==0
+           )))
+"""
 
 COMMON_FIELDS=set([
     'mz',
@@ -141,20 +166,33 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
             m = Mtab(**md)
             # now record mtab intensity per sample
             rest = dict((k,d[k]) for k in rest_keys if k)
-            samples_found = False
+            # record average intensities for control / non-control ("sample") samples
+            control_ints = []
+            sample_ints = []
+            n_samples = 0
             for cn,s in rest.items():
                 if cn in samples:
-                    samples_found = True
+                    n_samples += 1
+                    sample = samples[cn]
                     intensity = float(s)
-                    if intensity != 0:
-                        mi = MtabIntensity(mtab=m, sample=samples[cn], intensity=intensity)
-                        # FIXME use association proxy
-                        session.add(mi)
-            if not samples_found:
+                    mi = MtabIntensity(mtab=m, sample=sample, intensity=intensity)
+                    # FIXME use association proxy
+                    session.add(mi)
+                    # accumulate avgs
+                    if sample.control==1:
+                        control_ints.append(intensity)
+                    else:
+                        sample_ints.append(intensity)
+            if n_samples == 0:
                 log('ERROR: all samples missing from metabolite record, wrong metadata file?')
                 log('metabolite record columns (in no particular order): %s' % keys)
                 session.rollback()
                 return
+            # compute average intensities across control / non-control ("sample")
+            if control_ints:
+                m.avg_int_controls = sum(control_ints) / float(len(control_ints))
+            if sample_ints:
+                m.avg_int_samples = sum(sample_ints) / float(len(sample_ints))
             # add to session
             session.add(m)
             n += 1
@@ -237,6 +275,14 @@ class Db(object):
             yield m
     def mtab_random(self):
         return self.session.query(Mtab).order_by(func.random()).limit(1)[0]
+    def ctest(self):
+        mtab = self.mtab_random()
+        print mtab
+        for row in self.session.query(Mtab, Sample.control, func.avg(MtabIntensity.intensity)).\
+            join(MtabIntensity).join(Sample).\
+            filter(Mtab.id==mtab.id).\
+            group_by(Mtab, Sample.control):
+            print row
     def mtab_dist(self,n=1000):
         pdf = {}
         for i in range(n):

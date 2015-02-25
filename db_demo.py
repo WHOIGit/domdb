@@ -10,7 +10,6 @@ from sqlalchemy.orm import sessionmaker
 
 from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
-#from kuj_orm import etl, Db, mtab_search, mtab_random, match_all_from, match_one, remove_exp, mtab_dist
 from kuj_orm import etl, DomDb
 from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, default_config
 
@@ -331,6 +330,9 @@ class Shell(cmd.Cmd):
     def do_random(self,args):
         with DomDb(self.session_factory, self.config) as domdb:
             print domdb.mtab_random()
+    def do_ctest(self,args): # FIXME debug
+        with DomDb(self.session_factory, self.config) as domdb:
+            domdb.ctest()
     def do_pdf(self,args):
         with DomDb(self.session_factory, self.config) as domdb:
             pdf = domdb.mtab_dist(4000)
