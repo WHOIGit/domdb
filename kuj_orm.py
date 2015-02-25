@@ -310,7 +310,7 @@ class Db(object):
             for mi in match.intensities:
                 if exclude_controls and mi.sample.control==1:
                     continue
-                if mi.intensity <= match.avg_int_controls * int_over_controls:
+                if float(mi.intensity) <= float(match.avg_int_controls) * int_over_controls:
                     continue
                 # populate fixed schema
                 out_rec = {

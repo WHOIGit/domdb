@@ -84,43 +84,6 @@ def list_exps(session):
     for line in asciitable(list(q()),['name','samples','metabolites'],'Database is empty'):
         print line
 
-def matches_as_csv(pairs,exclude_controls=False,int_over_controls=0):
-    for m, match in pairs:
-        # get metadata for matching metabolite
-        for mi in match.intensities:
-            if exclude_controls and mi.sample.control==1:
-                continue
-            if mi.intensity <= match.avg_int_controls * int_over_controls:
-                continue
-            # populate fixed schema
-            out_rec = {
-                'mtab_exp': m.exp.name,
-                'mtab_mz': m.mz,
-                'mtab_rt': m.rt,
-                'mtab_annotated': m.annotated,
-                'match_exp': match.exp.name,
-                'match_mz': match.mz,
-                'match_rt': match.rt,
-                'match_annotated': match.annotated,
-                'sample': mi.sample.name,
-                'intensity': mi.intensity,
-                'control': mi.sample.control
-            }
-            # now populate variable (per experiment) schema
-            for attr in mi.sample.attrs:
-                # avoid collisions of attr names
-                attrname = avoid_name_collisions(attr.name, out_rec)
-                out_rec[attrname] = attr.value
-                if attrname not in out_schema: # keep track of all attributes we find
-                    out_schema.append(attrname)
-            out_recs.append(out_rec) # save record
-    # now we have all the output records in hand
-    # format the output records according to the accumulated union schema
-    yield ','.join(out_schema)
-    for rec in out_recs:
-        out_row = [rec.get(k,'') for k in out_schema]
-        yield ','.join(map(str,out_row)) # FIXME format numbers better
-
 def search_out_csv(db,matches,outf=None):
     if not matches:
         print 'No matches found'
@@ -328,4 +291,4 @@ class Shell(cmd.Cmd):
 
 if __name__=='__main__':
     shell = Shell(get_session_factory())
-    shell.cmdloop('Hi Krista')
+    shell.cmdloop('DOMDB v0')
