@@ -307,10 +307,17 @@ class Db(object):
             'control' # is that sample a control sample
         ]
         for m, match in pairs:
+            # exclude controls
+            is_control = [mi.intensity>0 and mi.sample.control==1 for mi in match.intensities]
+            if exclude_controls and any(is_control):
+                continue
+            # exclude matches not intense enough over controls
+            aic = float(match.avg_int_controls) * int_over_controls
+            is_le_aic = [float(mi.intensity) <= aic for mi in match.intensities]
+            #if any(is_le_aic):
+            #    continue
             for mi in match.intensities:
-                if exclude_controls and mi.sample.control==1:
-                    continue
-                if float(mi.intensity) <= float(match.avg_int_controls) * int_over_controls:
+                if mi.intensity <= 0: # FIXME unnecessary if excluded from db
                     continue
                 # populate fixed schema
                 out_rec = {
