@@ -314,8 +314,8 @@ class Db(object):
             # exclude matches not intense enough over controls
             aic = float(match.avg_int_controls) * int_over_controls
             is_le_aic = [float(mi.intensity) <= aic for mi in match.intensities]
-            #if any(is_le_aic):
-            #    continue
+            if all(is_le_aic):
+                continue
             for mi in match.intensities:
                 if mi.intensity <= 0: # FIXME unnecessary if excluded from db
                     continue
