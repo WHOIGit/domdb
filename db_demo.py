@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
 from kuj_orm import etl, DomDb
-from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, EXCLUDE_CONTROLS, INT_OVER_CONTROLS, default_config
+from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, EXCLUDE_CONTROLS, INT_OVER_CONTROLS, EXCLUDE_ATTRS, default_config
 
 from utils import asciitable
 
@@ -148,6 +148,19 @@ class Shell(cmd.Cmd):
         session = self.session_factory()
         list_exps(session)
         session.close()
+    def _print_config(self):
+        def massage(value):
+            try:
+                kvs = ', '.join(['%s=%s' % (k,v) for k,v in value.items()])
+                if not kvs:
+                    return '(none)'
+                else:
+                    return kvs
+            except AttributeError:
+                return value
+        rows = [dict(param=k,value=massage(v)) for k,v in self.config.items()]
+        for line in asciitable(rows,['param','value']):
+            print line
     def do_config(self,args):
         try:
             key, value = args.split(' ')
@@ -165,9 +178,29 @@ class Shell(cmd.Cmd):
                     return
         except ValueError:
             pass
-        rows = [dict(param=k,value=v) for k,v in self.config.items()]
-        for line in asciitable(rows,['param','value']):
-            print line
+        self._print_config()
+    def do_exclude(self,args):
+        if args=='controls':
+            self.do_config('exclude_controls True')
+            return
+        if args=='none':
+            self.config[EXCLUDE_ATTRS] = {}
+        else:
+            args = args.split(' ')
+            for arg in args:
+                if not re.search('=',arg):
+                    print 'syntax error: %s' % arg
+                    return
+            for arg in args:
+                k,v = re.split('=',arg)
+                print '%s = %s' % (k,v)
+                self.config[EXCLUDE_ATTRS].update({k:v})
+        self._print_config()
+    def do_include(self,args):
+        if args=='controls':
+            self.do_config('exclude_controls False')
+        else:
+            print 'syntax error: %s' % args
     def do_count(self,args):
         with DomDb(self.session_factory, self.config) as domdb:
             if not args:

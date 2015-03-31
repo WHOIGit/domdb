@@ -216,6 +216,7 @@ RT_DIFF='rt_diff'
 WITH_MS2='with_ms2'
 EXCLUDE_CONTROLS='exclude_controls'
 INT_OVER_CONTROLS='int_over_controls'
+EXCLUDE_ATTRS='exclude_attrs'
 
 def default_config():
     return {
@@ -223,7 +224,8 @@ def default_config():
         RT_DIFF: 30,
         WITH_MS2: False,
         EXCLUDE_CONTROLS: True,
-        INT_OVER_CONTROLS: 0
+        INT_OVER_CONTROLS: 0,
+        EXCLUDE_ATTRS: {}
     }
 
 def withms2_min(config):
@@ -318,6 +320,14 @@ class Db(object):
                 continue
             for mi in match.intensities:
                 if mi.intensity <= 0: # FIXME unnecessary if excluded from db
+                    continue
+                # now exclude based on sample attrs
+                exclude = False
+                for k,v in self.config[EXCLUDE_ATTRS].items():
+                    for attr in mi.sample.attrs:
+                        if attr.name==k and attr.value==v:
+                            exclude = True
+                if exclude:
                     continue
                 # populate fixed schema
                 out_rec = {
