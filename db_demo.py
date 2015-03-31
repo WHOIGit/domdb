@@ -72,19 +72,25 @@ def _complete_path(text, line):
 # ORM utilities
 
 def list_exps(session):
+    # list experiments, and stats about them
     def q():
+        # for all experiments
         for exp in session.query(Exp).all():
-            n_samples = len(exp.samples)
+            n_samples = len(exp.samples) # count the samples
+            # count the metabolites
             n_mtabs = session.query(func.count(Mtab.id)).filter(Mtab.exp==exp).first()[0]
+            # return a row
             yield {
                 'name': exp.name,
                 'samples': n_samples,
                 'metabolites': n_mtabs
             }
+    # format the rows nicely
     for line in asciitable(list(q()),['name','samples','metabolites'],'Database is empty'):
         print line
 
 def search_out_csv(db,matches,outf=None):
+    # return CSV output for matches
     if not matches:
         print 'No matches found'
         return
