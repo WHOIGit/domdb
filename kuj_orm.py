@@ -8,7 +8,8 @@ import traceback
 import sqlalchemy
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric, func, and_, func, select
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric
+from sqlalchemy import func, and_, distinct, select
 from sqlalchemy.orm import sessionmaker, relationship, backref, aliased, column_property
 from sqlalchemy.types import PickleType
 
@@ -246,6 +247,17 @@ class Db(object):
         self.session.commit()
         self.session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
         self.session.commit()
+    def all_attrs(self,exp=None):
+        aa = {}
+        for row in self.session.query(SampleAttr.name, SampleAttr.value).\
+            order_by(SampleAttr.name, SampleAttr.value).\
+            distinct():
+            k, v = row
+            if not k in aa:
+                aa[k] = [v]
+            else:
+                aa[k] += [v]
+        return aa
     def mtab_count(self,exp=None):
         q = self.session.query(func.count(Mtab.id))
         if exp is not None:

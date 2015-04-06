@@ -220,6 +220,14 @@ class Shell(cmd.Cmd):
                 exp = args.split(' ')[0]
                 n = domdb.mtab_count(exp)
                 print '%d metabolites in experiment %s' % (n, exp)
+    def do_list_attrs(self,args):
+        with DomDb(self.session_factory, self.config) as domdb:
+            aa = domdb.all_attrs()
+            def table():
+                for k,v in aa.items():
+                    yield {'name':k, 'values': ','.join(v)}
+            for line in asciitable(table(),disp_cols=['name','values']):
+                print line
     def do_dir(self, args):
         dir = args
         result = list(list_exp_files(dir))
