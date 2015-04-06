@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from test import get_sqlite_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
 from kuj_orm import etl, DomDb
-from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, EXCLUDE_CONTROLS, INT_OVER_CONTROLS, default_config
+from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, EXCLUDE_CONTROLS, INT_OVER_CONTROLS, EXCLUDE_ATTRS, default_config
 
 from utils import asciitable
 
@@ -72,24 +72,33 @@ def _complete_path(text, line):
 # ORM utilities
 
 def list_exps(session):
+    # list experiments, and stats about them
     def q():
+        # for all experiments
         for exp in session.query(Exp).all():
-            n_samples = len(exp.samples)
+            n_samples = len(exp.samples) # count the samples
+            # count the metabolites
             n_mtabs = session.query(func.count(Mtab.id)).filter(Mtab.exp==exp).first()[0]
+            # return a row
             yield {
                 'name': exp.name,
                 'samples': n_samples,
                 'metabolites': n_mtabs
             }
+    # format the rows nicely
     for line in asciitable(list(q()),['name','samples','metabolites'],'Database is empty'):
         print line
 
 def search_out_csv(db,matches,outf=None):
+    # return CSV output for matches
     if not matches:
         print 'No matches found'
         return
-    print 'Found %d matches' % len(matches)
-    outlines = db.matches_as_csv(matches)
+    # perform next query stage
+    outlines, n = db.matches_as_csv(matches)
+    if n==0:
+        print 'No matches found'
+        return
     if outf is not None:
         with open(outf,'w') as fout:
             print 'Saving results to %s ...' % outf
@@ -98,6 +107,7 @@ def search_out_csv(db,matches,outf=None):
     else:
         for line in outlines:
             print line
+    print '%d match(es) found' % n
 
 # command-line interface
 
@@ -148,6 +158,19 @@ class Shell(cmd.Cmd):
         session = self.session_factory()
         list_exps(session)
         session.close()
+    def _print_config(self):
+        def massage(value):
+            try:
+                kvs = ', '.join(['%s=%s' % (k,v) for k,v in value.items()])
+                if not kvs:
+                    return '(none)'
+                else:
+                    return kvs
+            except AttributeError:
+                return value
+        rows = [dict(param=k,value=massage(v)) for k,v in self.config.items()]
+        for line in asciitable(rows,['param','value']):
+            print line
     def do_config(self,args):
         try:
             key, value = args.split(' ')
@@ -165,9 +188,29 @@ class Shell(cmd.Cmd):
                     return
         except ValueError:
             pass
-        rows = [dict(param=k,value=v) for k,v in self.config.items()]
-        for line in asciitable(rows,['param','value']):
-            print line
+        self._print_config()
+    def do_exclude(self,args):
+        if args=='controls':
+            self.do_config('exclude_controls True')
+            return
+        if args=='none':
+            self.config[EXCLUDE_ATTRS] = {}
+        else:
+            args = args.split(' ')
+            for arg in args:
+                if not re.search('=',arg):
+                    print 'syntax error: %s' % arg
+                    return
+            for arg in args:
+                k,v = re.split('=',arg)
+                print '%s = %s' % (k,v)
+                self.config[EXCLUDE_ATTRS].update({k:v})
+        self._print_config()
+    def do_include(self,args):
+        if args=='controls':
+            self.do_config('exclude_controls False')
+        else:
+            print 'syntax error: %s' % args
     def do_count(self,args):
         with DomDb(self.session_factory, self.config) as domdb:
             if not args:
@@ -177,6 +220,14 @@ class Shell(cmd.Cmd):
                 exp = args.split(' ')[0]
                 n = domdb.mtab_count(exp)
                 print '%d metabolites in experiment %s' % (n, exp)
+    def do_list_attrs(self,args):
+        with DomDb(self.session_factory, self.config) as domdb:
+            aa = domdb.all_attrs()
+            def table():
+                for k,v in aa.items():
+                    yield {'name':k, 'values': ','.join(v)}
+            for line in asciitable(table(),disp_cols=['name','values']):
+                print line
     def do_dir(self, args):
         dir = args
         result = list(list_exp_files(dir))

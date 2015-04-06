@@ -8,7 +8,8 @@ import traceback
 import sqlalchemy
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric, func, and_, func, select
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric
+from sqlalchemy import func, and_, distinct, select
 from sqlalchemy.orm import sessionmaker, relationship, backref, aliased, column_property
 from sqlalchemy.types import PickleType
 
@@ -216,6 +217,7 @@ RT_DIFF='rt_diff'
 WITH_MS2='with_ms2'
 EXCLUDE_CONTROLS='exclude_controls'
 INT_OVER_CONTROLS='int_over_controls'
+EXCLUDE_ATTRS='exclude_attrs'
 
 def default_config():
     return {
@@ -223,7 +225,8 @@ def default_config():
         RT_DIFF: 30,
         WITH_MS2: False,
         EXCLUDE_CONTROLS: True,
-        INT_OVER_CONTROLS: 0
+        INT_OVER_CONTROLS: 0,
+        EXCLUDE_ATTRS: {}
     }
 
 def withms2_min(config):
@@ -244,6 +247,17 @@ class Db(object):
         self.session.commit()
         self.session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
         self.session.commit()
+    def all_attrs(self,exp=None):
+        aa = {}
+        for row in self.session.query(SampleAttr.name, SampleAttr.value).\
+            order_by(SampleAttr.name, SampleAttr.value).\
+            distinct():
+            k, v = row
+            if not k in aa:
+                aa[k] = [v]
+            else:
+                aa[k] += [v]
+        return aa
     def mtab_count(self,exp=None):
         q = self.session.query(func.count(Mtab.id))
         if exp is not None:
@@ -306,6 +320,7 @@ class Db(object):
             'intensity', # intensity of matched mtab in that sample
             'control' # is that sample a control sample
         ]
+        n = 0
         for m, match in pairs:
             # exclude controls
             is_control = [mi.intensity>0 and mi.sample.control==1 for mi in match.intensities]
@@ -316,6 +331,17 @@ class Db(object):
             is_le_aic = [float(mi.intensity) <= aic for mi in match.intensities]
             if all(is_le_aic):
                 continue
+            # now exclude based on sample attrs
+            exclude = False
+            for mi in match.intensities:
+                for k,v in self.config[EXCLUDE_ATTRS].items():
+                    for attr in mi.sample.attrs:
+                        if attr.name==k and attr.value==v:
+                            exclude = True
+            if exclude:
+                continue
+            # this mtab will be included in results, count as a match
+            n += 1
             for mi in match.intensities:
                 if mi.intensity <= 0: # FIXME unnecessary if excluded from db
                     continue
@@ -343,10 +369,12 @@ class Db(object):
                 out_recs.append(out_rec) # save record
         # now we have all the output records in hand
         # format the output records according to the accumulated union schema
-        yield ','.join(out_schema)
-        for rec in out_recs:
-            out_row = [rec.get(k,'') for k in out_schema]
-            yield ','.join(map(str,out_row)) # FIXME format numbers better
+        def outlines():
+            yield ','.join(out_schema)
+            for rec in out_recs:
+                out_row = [rec.get(k,'') for k in out_schema]
+                yield ','.join(map(str,out_row)) # FIXME format numbers better
+        return list(outlines()), n
     def ctest(self):
         mtab = self.mtab_random()
         print mtab
