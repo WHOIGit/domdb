@@ -318,16 +318,17 @@ class Db(object):
             is_le_aic = [float(mi.intensity) <= aic for mi in match.intensities]
             if all(is_le_aic):
                 continue
+            # now exclude based on sample attrs
+            exclude = False
             for mi in match.intensities:
-                if mi.intensity <= 0: # FIXME unnecessary if excluded from db
-                    continue
-                # now exclude based on sample attrs
-                exclude = False
                 for k,v in self.config[EXCLUDE_ATTRS].items():
                     for attr in mi.sample.attrs:
                         if attr.name==k and attr.value==v:
                             exclude = True
-                if exclude:
+            if exclude:
+                continue
+            for mi in match.intensities:
+                if mi.intensity <= 0: # FIXME unnecessary if excluded from db
                     continue
                 # populate fixed schema
                 out_rec = {
