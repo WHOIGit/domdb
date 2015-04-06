@@ -308,6 +308,7 @@ class Db(object):
             'intensity', # intensity of matched mtab in that sample
             'control' # is that sample a control sample
         ]
+        n = 0
         for m, match in pairs:
             # exclude controls
             is_control = [mi.intensity>0 and mi.sample.control==1 for mi in match.intensities]
@@ -327,6 +328,8 @@ class Db(object):
                             exclude = True
             if exclude:
                 continue
+            # this mtab will be included in results, count as a match
+            n += 1
             for mi in match.intensities:
                 if mi.intensity <= 0: # FIXME unnecessary if excluded from db
                     continue
@@ -354,10 +357,12 @@ class Db(object):
                 out_recs.append(out_rec) # save record
         # now we have all the output records in hand
         # format the output records according to the accumulated union schema
-        yield ','.join(out_schema)
-        for rec in out_recs:
-            out_row = [rec.get(k,'') for k in out_schema]
-            yield ','.join(map(str,out_row)) # FIXME format numbers better
+        def outlines():
+            yield ','.join(out_schema)
+            for rec in out_recs:
+                out_row = [rec.get(k,'') for k in out_schema]
+                yield ','.join(map(str,out_row)) # FIXME format numbers better
+        return list(outlines()), n
     def ctest(self):
         mtab = self.mtab_random()
         print mtab

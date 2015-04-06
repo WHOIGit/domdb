@@ -94,8 +94,11 @@ def search_out_csv(db,matches,outf=None):
     if not matches:
         print 'No matches found'
         return
-    print 'Found %d matches' % len(matches)
-    outlines = db.matches_as_csv(matches)
+    # perform next query stage
+    outlines, n = db.matches_as_csv(matches)
+    if n==0:
+        print 'No matches found'
+        return
     if outf is not None:
         with open(outf,'w') as fout:
             print 'Saving results to %s ...' % outf
@@ -104,6 +107,7 @@ def search_out_csv(db,matches,outf=None):
     else:
         for line in outlines:
             print line
+    print '%d match(es) found' % n
 
 # command-line interface
 
