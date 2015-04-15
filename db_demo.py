@@ -311,8 +311,7 @@ class Shell(cmd.Cmd):
             return
         print 'Removing all %s data ...' % exp
         with DomDb(self.session_factory, self.config) as domdb:
-            domdb.remove_exp()
-            remove_exp(session,exp)
+            domdb.remove_exp(exp)
         self.do_list('')
     def do_test(self,args):
         with DomDb(self.session_factory, self.config) as domdb:
