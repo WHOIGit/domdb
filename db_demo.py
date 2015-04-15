@@ -225,7 +225,8 @@ class Shell(cmd.Cmd):
             aa = domdb.all_attrs()
             def table():
                 for k,v in aa.items():
-                    yield {'name':k, 'values': ','.join(v)}
+                    if k not in ['ignore']:
+                        yield {'name':k, 'values': ','.join(v)}
             for line in asciitable(table(),disp_cols=['name','values']):
                 print line
     def do_dir(self, args):
