@@ -135,7 +135,7 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     samples = {}
     ignored = 0
     required_sample_attrs = [FILE_NAME, CONTROL]
-    with open(mdf_path) as cf:
+    with open(mdf_path,'rU') as cf:
         log('loading %s metadata from %s' % (exp_name, mdf_path))
         for d in csv.DictReader(cf):
             if IGNORE in d and d[IGNORE]=='1':
@@ -155,7 +155,7 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
     log('%d total samples loaded, %d ignored' % (len(samples), ignored))
     n = 0
     # now add metabolite data
-    with open(df_path) as cf:
+    with open(df_path,'rU') as cf:
         log('loading %s metabolite data from %s' % (exp_name, df_path))
         for d in csv.DictReader(cf):
             # subset the fields
