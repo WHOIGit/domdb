@@ -1,3 +1,5 @@
+-- collate mtab, sample, and intensity tables
+
 create or replace view mtab_sample_intensity as
 
 select a.exp_id as exp_id, a.id as mtab_id, a.mz, a.rt, a."withMS2" as withms2, s.id as sample_id, i.intensity, s.control
