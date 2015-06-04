@@ -6,7 +6,7 @@ Vagrant.configure("2") do |config|
   config.vm.network :forwarded_port, host: 5433, guest: 5432
   config.vm.provision :shell, inline: <<-SHELL
 sudo apt-get update
-sudo apt-get install -y emacs24-nox python-sqlalchemy
+sudo apt-get install -y emacs24-nox python-sqlalchemy python-pandas python-jinja2
 # postgres 9.3
 sudo apt-get install -y postgresql-9.3 postgresql-contrib-9.3 python-psycopg2
 sudo -u postgres createuser domdb
