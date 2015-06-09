@@ -11,3 +11,9 @@ a.id = i.mtab_id
 and s.id = i.sample_id
 
 order by mtab_id, sample_id;
+
+-- collate sample attributes
+
+create or replace view agg_sample_attr as
+select sample_id, array_agg(name || '=' || value) as attrs from sample_attr
+group by sample_id;

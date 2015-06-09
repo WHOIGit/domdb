@@ -37,10 +37,11 @@ select exp_id, sq1.mtab_id, mz, rt, withms2, sample_id, intensity, sq1.control{%
 from sq1
 )
 -- query: filter third subquery by intensity over controls
-select exp_id, mtab_id, mz, rt, withms2, sample_id{% for attr in attrs %}, attr_{{attr}}{% endfor %}, intensity, control
+select exp_id, mtab_id, mz, rt, withms2, sample_id, intensity, control,
+       (select attrs from agg_sample_attr asa where asa.sample_id=sq3.sample_id)
 from sq3
 where intensity > %s * iic
-order by exp_id, mtab_id{% for attr in attrs %}, attr_{{attr}}{% endfor %}, sample_id
+order by exp_id, mtab_id, sample_id
 """
 
 ppm_diff = 0.5
