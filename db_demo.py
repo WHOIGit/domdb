@@ -8,7 +8,7 @@ import sqlalchemy
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from test import get_sqlite_engine
+from test import get_sqlite_engine, get_psql_engine
 from kuj_orm import Base, Mtab, MtabIntensity, Exp
 from kuj_orm import etl, DomDb
 from kuj_orm import PPM_DIFF, RT_DIFF, WITH_MS2, EXCLUDE_CONTROLS, INT_OVER_CONTROLS, EXCLUDE_ATTRS, default_config
@@ -22,7 +22,8 @@ def get_session_factory():
     if DEBUG:
         engine = sqlalchemy.create_engine('sqlite://')
     else:
-        engine = get_sqlite_engine(delete=False)
+        #engine = get_sqlite_engine(delete=False)
+        engine = get_psql_engine()
     Base.metadata.create_all(engine)
     Session = sessionmaker()
     Session.configure(bind=engine)
@@ -158,7 +159,7 @@ class Shell(cmd.Cmd):
         session = self.session_factory()
         list_exps(session)
         session.close()
-    def _print_config(self):
+    def _get_config(self):
         def massage(value):
             try:
                 kvs = ', '.join(['%s=%s' % (k,v) for k,v in value.items()])
@@ -168,7 +169,9 @@ class Shell(cmd.Cmd):
                     return kvs
             except AttributeError:
                 return value
-        rows = [dict(param=k,value=massage(v)) for k,v in self.config.items()]
+        return [dict(param=k,value=massage(v)) for k,v in self.config.items()]
+    def _print_config(self):
+        rows = self._get_config()
         for line in asciitable(rows,['param','value']):
             print line
     def do_config(self,args):

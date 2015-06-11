@@ -47,12 +47,13 @@ order by exp_id, mtab_id, sample_id
 ppm_diff = 0.5
 rt_range = 30
 
-mz = 116
-rt = 100
+mz = 105
+rt = 80
 
 ioc = 10
 
-attrs = ['media','time']
+#attrs = ['media','time']
+attrs=[]
 
 query = Environment().from_string(template).render({
     'attrs': attrs
