@@ -39,11 +39,31 @@ engine = get_psql_engine()
 c = engine.connect()
 
 for case in cases:
+    print case
     query, params = construct_search(case.get('mz'),
                                      case.get('rt'),
                                      ioc=case.get('ioc'),
                                      attrs=case.get('attrs',[]))
     r = c.execute(query,*params)
-    for row in r:
-        print row
-
+    rows = r.fetchall()
+    if not rows:
+        continue
+    # determine column headings
+    cols = []
+    attrs = []
+    for row in rows:
+        cols = row.keys()
+        for kv in dict(row.items()).get('attrs'):
+            k, v = kv.split('=')
+            if k not in attrs:
+                attrs += [k]
+    cols = [x for x in cols if x != 'attrs'] + attrs
+    print ','.join(cols)
+    # now postprocess rows
+    for row in rows:
+        rd = dict(row.items())
+        # explode attrs
+        ad = dict([kv.split('=') for kv in rd['attrs']])
+        del rd['attrs']
+        rd.update(ad) # FIXME avoid name collisions
+        print ','.join(str(rd[c]) for c in cols)
