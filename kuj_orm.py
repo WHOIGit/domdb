@@ -40,9 +40,6 @@ class Mtab(Base):
     withMS2 = Column(Integer, default=0)
     annotated = Column(String, default='')
 
-    avg_int_controls = Column(Numeric,default=0)
-    avg_int_samples = Column(Numeric,default=0)
-
     exp = relationship(Exp, backref=backref('mtabs', cascade='all,delete-orphan'))
 
     def __repr__(self):
@@ -82,27 +79,6 @@ class MtabIntensity(Base):
 
     sample = relationship(Sample, backref=backref('intensities', cascade='all,delete-orphan'))
     mtab = relationship(Mtab, backref=backref('intensities', cascade='all,delete-orphan'))
-
-# the following two implementations are for reference;
-# they are slow and so are precomputed during etl instead
-"""
-# "average intensity in controls" attribute of Mtab
-Mtab.avg_int_controls = column_property(
-    select([coalesce(func.avg(MtabIntensity.intensity),0)],\
-           and_(
-               MtabIntensity.mtab_id==Mtab.id,
-               Sample.id==MtabIntensity.sample_id,
-               Sample.control==1
-           )))
-# "average intensity in samples" attribute of Mtab
-Mtab.avg_int_samples = column_property(
-    select([coalesce(func.avg(MtabIntensity.intensity),0)],\
-           and_(
-               MtabIntensity.mtab_id==Mtab.id,
-               Sample.id==MtabIntensity.sample_id,
-               Sample.control==0
-           )))
-"""
 
 COMMON_FIELDS=set([
     'mz',
@@ -167,9 +143,6 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
             m = Mtab(**md)
             # now record mtab intensity per sample
             rest = dict((k,d[k]) for k in rest_keys if k)
-            # record average intensities for control / non-control ("sample") samples
-            control_ints = []
-            sample_ints = []
             n_samples = 0
             for cn,s in rest.items():
                 if cn in samples:
@@ -179,21 +152,11 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
                     mi = MtabIntensity(mtab=m, sample=sample, intensity=intensity)
                     # FIXME use association proxy
                     session.add(mi)
-                    # accumulate avgs
-                    if sample.control==1:
-                        control_ints.append(intensity)
-                    else:
-                        sample_ints.append(intensity)
             if n_samples == 0:
                 log('ERROR: all samples missing from metabolite record, wrong metadata file?')
                 log('metabolite record columns (in no particular order): %s' % keys)
                 session.rollback()
                 return
-            # compute average intensities across control / non-control ("sample")
-            if control_ints:
-                m.avg_int_controls = sum(control_ints) / float(len(control_ints))
-            if sample_ints:
-                m.avg_int_samples = sum(sample_ints) / float(len(sample_ints))
             # add to session
             session.add(m)
             n += 1
@@ -226,7 +189,7 @@ def default_config():
         WITH_MS2: False,
         EXCLUDE_CONTROLS: True,
         INT_OVER_CONTROLS: 0,
-        EXCLUDE_ATTRS: {}
+        EXCLUDE_ATTRS: set()
     }
 
 def withms2_min(config):
@@ -240,12 +203,8 @@ class Db(object):
         self.session = session
         self.config = config
     def remove_exp(self,exp):
-        # FIXME cascading ORM delete should make this unnecessary
-        self.session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
-        self.session.commit()
-        self.session.query(Sample).filter(Sample.exp.has(name=exp)).delete(synchronize_session='fetch')
-        self.session.commit()
-        self.session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
+        theExp = self.session.query(Exp).filter(Exp.name==exp).first()
+        self.session.delete(theExp)
         self.session.commit()
     def all_attrs(self,exp=None):
         aa = {}
