@@ -3,26 +3,26 @@ from jinja2 import Environment
 
 from sql_templates import EXCLUDE_CONTROLS, INT_OVER_CONTROLS, ATTR_EXCLUDE_CONTROLS
 
-def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_range=30,attrs=None):
+def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=None):
     if ioc is not None:
         query = Environment().from_string(INT_OVER_CONTROLS).render({
             'attrs': attrs
         })
-        params = (mz,ppm_diff,rt,rt_range,ioc)
+        params = (mz,ppm_diff,rt,rt_diff,ioc)
     elif attrs is not None and len(attrs) > 0:
         query = Environment().from_string(ATTR_EXCLUDE_CONTROLS).render({
             'attrs': attrs
         })
-        params = (mz,ppm_diff,rt,rt_range)
+        params = (mz,ppm_diff,rt,rt_diff)
     else:
         query = EXCLUDE_CONTROLS
-        params = (mz,ppm_diff,rt,rt_range)
+        params = (mz,ppm_diff,rt,rt_diff)
     return query, params
 
-def search(engine,mz,rt,ioc=None,ppm_diff=0.5,rt_range=30,attrs=None):
+def search(engine,mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=None):
     """returns ResultProxy"""
     c = engine.connect()
-    query, params = construct_search(mz,rt,ioc=ioc,ppm_diff=ppm_diff,rt_range=rt_range,attrs=attrs)
+    query, params = construct_search(mz,rt,ioc=ioc,ppm_diff=ppm_diff,rt_diff=rt_diff,attrs=attrs)
     return c.execute(query,*params)
 
 def results_as_csv(r):

@@ -12,6 +12,8 @@ from kuj_orm import Base, Exp, Mtab, DomDb, etl, initialize_schema, SampleAttr
 from complete_path import complete_path
 from utils import asciitable
 
+import new_search
+
 from test import get_psql_engine
 
 DEBUG=False
@@ -195,6 +197,22 @@ class Shell(cmd.Cmd):
         sys.exit(0)
     def do_quit(self,args):
         sys.exit(0)
+    def do_search(self,args):
+        try:
+            arglist = re.split(r' +',args)
+            mz = float(arglist[0])
+            rt = int(arglist[1])
+            outf = arglist[2]
+        except IndexError:
+            print 'usage: search [mz] [rt] [outfile]'
+        ioc = self.config.get('int_over_controls')
+        ppm_diff = self.config.get('ppm_diff')
+        rt_diff = self.config.get('rt_diff')
+        attrs = self.config.get('attrs')
+        with open(outf,'wu') as fout:
+            r = new_search.search(get_engine(),mz,rt,ioc,ppm_diff,rt_diff,attrs)
+            for line in new_search.results_as_csv(r):
+                print >>fout, line
 
 if __name__=='__main__':
     engine = get_engine()
