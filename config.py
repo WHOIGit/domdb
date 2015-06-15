@@ -1,4 +1,6 @@
 import re
+import os
+import json
 
 def get_default_config():
     return dict(
@@ -7,7 +9,7 @@ def get_default_config():
         with_ms2 = False,
         exclude_controls = True,
         int_over_controls = 0,
-        attrs = set()
+        attrs = []
     )
 
 def str2bool(s):
@@ -32,3 +34,21 @@ def set_config_key(config,k,v):
     """v is expected to be a string"""
     config[k] = CONFIG_CASTS[k](v)
 
+def get_config_path(dir=None):
+    if dir is None:
+        dir = os.path.expanduser('~')
+    return os.path.join(dir,'.domdb_config.json')
+
+def save_config(config,dir=None):
+    with open(get_config_path(dir),'w') as outf:
+        json.dump(config,outf)
+
+def load_config(dir=None):
+    with open(get_config_path(dir),'r') as inf:
+        return json.load(inf)
+
+def initialize_config(dir=None):
+    try:
+        return load_config(dir)
+    except:
+        return get_default_config()

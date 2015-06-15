@@ -7,8 +7,8 @@ import re
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from config import get_default_config, complete_config_key, set_config_key
-from kuj_orm import Base, Exp, Mtab, DomDb, etl, initialize_schema
+from config import complete_config_key, set_config_key, initialize_config, save_config
+from kuj_orm import Base, Exp, Mtab, DomDb, etl, initialize_schema, SampleAttr
 from complete_path import complete_path
 from utils import asciitable
 
@@ -79,7 +79,7 @@ class Shell(cmd.Cmd):
         cmd.Cmd.__init__(self)
         self.prompt = 'domdb> '
         self.session_factory = session_factory
-        self.config = get_default_config()
+        self.config = initialize_config()
         self.do_count('')
     def do_count(self,args):
         with DomDb(self.session_factory, self.config) as domdb:
@@ -157,7 +157,15 @@ class Shell(cmd.Cmd):
         with DomDb(self.session_factory, self.config) as domdb:
             domdb.remove_exp(exp)
         self.do_list('')
+    def _complete_attr(self, text):
+        session = self.session_factory()
+        return [r[0] for r in session.query(SampleAttr.name).\
+                filter(SampleAttr.name.like(text+'%')).\
+                order_by(SampleAttr.name).\
+                distinct().all()]
     def complete_set(self, text, line, start_idx, end_idx):
+        if re.match(r'.*attrs.*',line):
+            return self._complete_attr(text)
         return complete_config_key(self.config, text)
     def _print_config(self):
         def massage(value):
@@ -177,9 +185,12 @@ class Shell(cmd.Cmd):
                 k = arglist[0]
                 v = ' '.join(arglist[1:])
                 set_config_key(self.config,k,v)
+                save_config(self.config)
                 self._print_config()
+            except ValueError:
+                print 'Syntax error: %s' % args
             except:
-                print 'Syntax error'
+                raise
     def do_exit(self,args):
         sys.exit(0)
     def do_quit(self,args):
