@@ -5,6 +5,8 @@ import json
 from contextlib import contextmanager
 import traceback
 
+from sql_templates import CREATE_VIEWS
+
 import sqlalchemy
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.ext.declarative import declarative_base
@@ -79,6 +81,13 @@ class MtabIntensity(Base):
 
     sample = relationship(Sample, backref=backref('intensities', cascade='all,delete-orphan'))
     mtab = relationship(Mtab, backref=backref('intensities', cascade='all,delete-orphan'))
+
+def initialize_schema(engine):
+    Base.metadata.create_all(engine)
+    # create views
+    c = engine.connect()
+    for cv in CREATE_VIEWS:
+        c.execute(cv)
 
 COMMON_FIELDS=set([
     'mz',
@@ -203,6 +212,7 @@ class Db(object):
         self.session = session
         self.config = config
     def remove_exp(self,exp):
+        # http://stackoverflow.com/questions/19243964/python-sql-alchemy-cascade-delete
         theExp = self.session.query(Exp).filter(Exp.name==exp).first()
         self.session.delete(theExp)
         self.session.commit()

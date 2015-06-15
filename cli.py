@@ -7,7 +7,8 @@ import re
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from kuj_orm import Base, Exp, Mtab, DomDb, default_config, etl
+from config import get_default_config, complete_config_key, set_config_key
+from kuj_orm import Base, Exp, Mtab, DomDb, etl, initialize_schema
 from complete_path import complete_path
 from utils import asciitable
 
@@ -15,13 +16,17 @@ from test import get_psql_engine
 
 DEBUG=False
 # ORM session management
-def get_session_factory():
+
+def get_engine():
     if DEBUG:
         engine = sqlalchemy.create_engine('sqlite://')
     else:
         #engine = get_sqlite_engine(delete=False)
         engine = get_psql_engine()
-    Base.metadata.create_all(engine)
+    return engine
+
+def get_session_factory():
+    engine = get_engine()
     Session = sessionmaker()
     Session.configure(bind=engine)
     return Session
@@ -74,7 +79,7 @@ class Shell(cmd.Cmd):
         cmd.Cmd.__init__(self)
         self.prompt = 'domdb> '
         self.session_factory = session_factory
-        self.config = default_config()
+        self.config = get_default_config()
         self.do_count('')
     def do_count(self,args):
         with DomDb(self.session_factory, self.config) as domdb:
@@ -138,6 +143,10 @@ class Shell(cmd.Cmd):
         session.close()
     def complete_add(self, text, line, start_idx, end_idx):
         return complete_path(text, line)
+    def complete_remove(self, text, line, start_idx, end_idx):
+        session = self.session_factory()
+        exps = session.query(Exp).filter(Exp.name.like(text+'%')).all()
+        return [e.name for e in exps]
     def do_remove(self,args):
         try:
             exp = args.split(' ')[0]
@@ -148,11 +157,36 @@ class Shell(cmd.Cmd):
         with DomDb(self.session_factory, self.config) as domdb:
             domdb.remove_exp(exp)
         self.do_list('')
+    def complete_set(self, text, line, start_idx, end_idx):
+        return complete_config_key(self.config, text)
+    def _print_config(self):
+        def massage(value):
+            try:
+                return ','.join(value)
+            except:
+                return value
+        ds = [dict(var=k,value=massage(v)) for k,v in self.config.items()]
+        for line in asciitable(ds,disp_cols=['var','value']):
+            print line
+    def do_set(self,args):
+        if not args:
+            self._print_config()
+        else:
+            try:
+                arglist = re.split(r' +',args)
+                k = arglist[0]
+                v = ' '.join(arglist[1:])
+                set_config_key(self.config,k,v)
+                self._print_config()
+            except:
+                print 'Syntax error'
     def do_exit(self,args):
         sys.exit(0)
     def do_quit(self,args):
         sys.exit(0)
 
 if __name__=='__main__':
+    engine = get_engine()
+    initialize_schema(engine)
     shell = Shell(get_session_factory())
     shell.cmdloop('DOMDB v1')
