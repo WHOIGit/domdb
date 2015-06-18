@@ -8,7 +8,7 @@ def get_default_config():
         rt_diff = 30,
         with_ms2 = False,
         exclude_controls = True,
-        int_over_controls = 0,
+        int_over_controls = None,
         attrs = []
     )
 

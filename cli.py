@@ -7,7 +7,7 @@ import re
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from config import complete_config_key, set_config_key, initialize_config, save_config
+from config import complete_config_key, set_config_key, initialize_config, save_config, get_default_config
 from kuj_orm import Base, Exp, Mtab, DomDb, etl, initialize_schema, SampleAttr
 from complete_path import complete_path
 from utils import asciitable
@@ -49,6 +49,19 @@ def list_exps(session):
             }
     # format the rows nicely
     for line in asciitable(list(q()),['name','samples','metabolites'],'Database is empty'):
+        print line
+
+def list_samples(session,exp_name):
+    cols = ['name']
+    rows = []
+    for sample in session.query(Exp).filter(Exp.name==exp_name).first().samples:
+        d = { 'name': sample.name }
+        for a in sample.attrs:
+            if a.name not in cols:
+                cols.append(a.name)
+            d[a.name] = a.value
+        rows.append(d)
+    for line in asciitable(rows,cols,'No samples found'):
         print line
 
 def list_exp_files(dir):
@@ -175,7 +188,7 @@ class Shell(cmd.Cmd):
                 return ','.join(value)
             except:
                 return value
-        ds = [dict(var=k,value=massage(v)) for k,v in self.config.items()]
+        ds = [dict(var=k,value=massage(v)) for k,v in sorted(self.config.items())]
         for line in asciitable(ds,disp_cols=['var','value']):
             print line
     def do_set(self,args):
@@ -193,6 +206,26 @@ class Shell(cmd.Cmd):
                 print 'Syntax error: %s' % args
             except:
                 raise
+    def complete_reset(self, text, line, start_idx, end_idx):
+        return complete_config_key(self.config, text)
+    def do_reset(self,args):
+        if args:
+            self.config[args] = get_default_config()[args]
+        else:
+            self.config = get_default_config()
+        save_config(self.config)
+        self._print_config()
+    def complete_samples(self, text, line, start_idx, end_idx):
+        session = self.session_factory()
+        return [r[0] for r in session.query(Exp.name).\
+                filter(Exp.name.like(text+'%')).\
+                order_by(Exp.name).\
+                distinct().all()]
+    def do_samples(self, args):
+        exp_name = args
+        session = self.session_factory()
+        list_samples(session,exp_name)
+        session.close()
     def do_exit(self,args):
         sys.exit(0)
     def do_quit(self,args):
@@ -205,6 +238,7 @@ class Shell(cmd.Cmd):
             outf = arglist[2]
         except IndexError:
             print 'usage: search [mz] [rt] [outfile]'
+            return
         ioc = self.config.get('int_over_controls')
         ppm_diff = self.config.get('ppm_diff')
         rt_diff = self.config.get('rt_diff')
@@ -212,6 +246,7 @@ class Shell(cmd.Cmd):
         with open(outf,'wu') as fout:
             r = new_search.search(get_engine(),mz,rt,ioc,ppm_diff,rt_diff,attrs)
             for line in new_search.results_as_csv(r):
+                print line
                 print >>fout, line
 
 if __name__=='__main__':
