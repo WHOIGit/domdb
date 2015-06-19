@@ -12,6 +12,7 @@ from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric
 from sqlalchemy import func, and_, distinct, select
+from sqlalchemy.schema import DDL
 from sqlalchemy.orm import sessionmaker, relationship, backref, aliased, column_property
 from sqlalchemy.types import PickleType
 
@@ -87,7 +88,7 @@ def initialize_schema(engine):
     # create views
     c = engine.connect()
     for cv in CREATE_VIEWS:
-        c.execute(cv)
+        c.execute(DDL(cv))
 
 COMMON_FIELDS=set([
     'mz',
