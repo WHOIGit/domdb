@@ -19,6 +19,10 @@ from test import get_psql_engine
 DEBUG=False
 # ORM session management
 
+def console_log(o):
+    """so I can mix old and new-style print functions"""
+    print str(o)
+
 def get_engine():
     if DEBUG:
         engine = sqlalchemy.create_engine('sqlite://')
@@ -52,10 +56,11 @@ def list_exps(session):
         print line
 
 def list_samples(session,exp_name):
-    cols = ['name']
+    cols = ['name','control']
     rows = []
     for sample in session.query(Exp).filter(Exp.name==exp_name).first().samples:
-        d = { 'name': sample.name }
+        d = { 'name': sample.name,
+              'control': sample.control }
         for a in sample.attrs:
             if a.name not in cols:
                 cols.append(a.name)
@@ -129,8 +134,6 @@ class Shell(cmd.Cmd):
                 print 'loading experiment %s from:' % name
                 print '- data file %s' % path
                 print '- metadata file %s' % mdpath
-                def console_log(x):
-                    print x
                 etl(domdb.session,name,path,mdpath,log=console_log)
                 n = domdb.session.query(func.count(Mtab.id)).first()[0]
                 print '%d metabolites in database' % n

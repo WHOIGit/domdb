@@ -39,3 +39,15 @@ def asciitable(dicts,disp_cols=None,none_msg=None,border=True):
         yield bord(' | '.join([rpad(str(row[col]),widths[col]) for col in cols]),'|')
     if border:
         yield spacer
+
+def resultproxy2asciitable(r,empty_message='No rows'):
+    """yields an asciitable representation of an SQLAlchemy ResultProxy"""
+    cols = []
+    row_proxies = r.fetchall()
+    rows = []
+    for r in row_proxies:
+        if not cols:
+            cols = r.keys()
+        rows.append(dict(r.items()))
+    for line in asciitable(rows,cols,empty_message):
+        print line
