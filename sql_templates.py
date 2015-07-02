@@ -70,8 +70,14 @@ q3 as (select mtab_id, sample_id
                          where 1e6 * abs(m.mz - %s) <= %s * m.mz
                          and abs(m.rt - %s) <= %s)
        and control=0
+{% if ioc %}
        and intensity > %s * (select iic from q2 where q1.mtab_id=q2.mtab_id{% for a in attrs %}
                              and q1.attr_{{a}} is not distinct from q2.attr_{{a}}{% endfor %})
+{% else %}
+       and intensity > 0
+       and 0 = (select iic from q2 where q1.mtab_id=q2.mtab_id{% for a in attrs %}
+                and q1.attr_{{a}} is not distinct from q2.attr_{{a}}{% endfor %})
+{% endif %}
        order by mtab_id, sample_id)
 
 -- friendly output

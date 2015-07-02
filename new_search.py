@@ -4,18 +4,13 @@ from jinja2 import Environment
 from sql_templates import EXCLUDE_CONTROLS, INT_OVER_CONTROLS, ATTR_EXCLUDE_CONTROLS
 
 def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=None):
+    query = Environment().from_string(INT_OVER_CONTROLS).render({
+        'attrs': attrs,
+        'ioc': ioc
+    })
     if ioc is not None:
-        query = Environment().from_string(INT_OVER_CONTROLS).render({
-            'attrs': attrs
-        })
         params = (mz,ppm_diff,rt,rt_diff,ioc)
-    elif attrs is not None and len(attrs) > 0:
-        query = Environment().from_string(ATTR_EXCLUDE_CONTROLS).render({
-            'attrs': attrs
-        })
-        params = (mz,ppm_diff,rt,rt_diff)
     else:
-        query = EXCLUDE_CONTROLS
         params = (mz,ppm_diff,rt,rt_diff)
     return query, params
 
@@ -47,7 +42,7 @@ def results_as_csv(r):
         ad = dict([kv.split('=') for kv in rd['attrs']])
         del rd['attrs']
         rd.update(ad) # FIXME avoid name collisions
-        yield ','.join(str(rd[c]) for c in cols)
+        yield ','.join(str(rd.get(c,'')) for c in cols)
 
 def test(engine):
     cases = [

@@ -61,7 +61,7 @@ def list_samples(session,exp_name):
     for sample in session.query(Exp).filter(Exp.name==exp_name).first().samples:
         d = { 'name': sample.name,
               'control': sample.control }
-        for a in sample.attrs:
+        for a in sorted(sample.attrs,key=lambda a:a.name):
             if a.name not in cols:
                 cols.append(a.name)
             d[a.name] = a.value
