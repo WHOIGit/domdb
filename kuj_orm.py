@@ -5,6 +5,8 @@ import json
 from contextlib import contextmanager
 import traceback
 
+from sql_templates import CREATE_VIEWS
+
 import sqlalchemy
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.ext.declarative import declarative_base
@@ -83,6 +85,9 @@ class MtabIntensity(Base):
 
 def initialize_schema(engine):
     Base.metadata.create_all(engine)
+    c = engine.connect()
+    for cv in CREATE_VIEWS:
+        c.execute(DDL(cv))
 
 COMMON_FIELDS=set([
     'mz',

@@ -1,10 +1,10 @@
 from engine import get_psql_engine
 from jinja2 import Environment
 
-from sql_templates import INT_OVER_CONTROLS
+from sql_templates import SEARCH_TEMPLATE
 
 def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=None):
-    query = Environment().from_string(INT_OVER_CONTROLS).render({
+    query = Environment().from_string(SEARCH_TEMPLATE).render({
         'attrs': attrs,
         'ioc': ioc
     })
