@@ -14,7 +14,7 @@ from utils import asciitable
 
 import new_search
 
-from test import get_psql_engine
+from engine import get_psql_engine
 
 DEBUG=False
 # ORM session management
