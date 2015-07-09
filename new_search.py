@@ -1,9 +1,9 @@
 from engine import get_psql_engine
 from jinja2 import Environment
 
-from sql_templates import SEARCH_TEMPLATE
+from sql_templates import SEARCH_TEMPLATE, MATCH_TEMPLATE
 
-def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=None):
+def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
     query = Environment().from_string(SEARCH_TEMPLATE).render({
         'attrs': attrs,
         'ioc': ioc
@@ -14,10 +14,26 @@ def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=None):
         params = (mz,ppm_diff,rt,rt_diff)
     return query, params
 
-def search(engine,mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=None):
+def construct_match(exp_name,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
+    query = Environment().from_string(MATCH_TEMPLATE).render({
+        'attrs': attrs,
+        'ioc': ioc
+    })
+    if ioc is not None:
+        params = (exp_name,ioc,ppm_diff,rt_diff)
+    else:
+        params = (exp_name,ppm_diff,rt_diff)
+    return query, params
+
+def search(engine,mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
     """returns ResultProxy"""
     c = engine.connect()
     query, params = construct_search(mz,rt,ioc=ioc,ppm_diff=ppm_diff,rt_diff=rt_diff,attrs=attrs)
+    return c.execute(query,*params)
+
+def match(engine,exp_name,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
+    c = engine.connect()
+    query, params = construct_match(exp_name,ioc,ppm_diff,rt_diff,attrs)
     return c.execute(query,*params)
 
 def results_as_csv(r):

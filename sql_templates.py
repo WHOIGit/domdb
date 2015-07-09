@@ -44,7 +44,7 @@ and msa.sample_id=q3.sample_id
 """
 
 # positional SQL params
-# 1. experiment to match from
+# 1. name of experiment to match from
 # 2. (optional) ioc
 # 3. m/z ppm range
 # 4. rt range
@@ -57,7 +57,7 @@ with
 q1 as (select mtab_id, i.sample_id, intensity, control{% for a in attrs %},
              (select value from sample_attr sa where sa.sample_id=i.sample_id and sa.name='{{a}}') as attr_{{a}}{% endfor %}
        from intensity i, sample s
-       where s.exp_id=%s
+       where s.exp_id=(select id from experiment where name=%s)
        and i.sample_id = s.id),
 
 q2 as (select mtab_id{% for a in attrs %}, attr_{{a}}{% endfor %}, avg(intensity) as iic
@@ -84,8 +84,8 @@ q4 as (select a.id, b.id as match_id
        where a.id in (select mtab_id from q3)
        and a.id <> b.id
        and b.id not in (select mtab_id from q3)
-       and 1e6 * abs(a.mz - b.mz) <= 0.5 * a.mz
-       and abs(a.rt - b.rt) <= 30)
+       and 1e6 * abs(a.mz - b.mz) <= %s * a.mz
+       and abs(a.rt - b.rt) <= %s)
 
 -- friendly output
 select a.id, a.mz, a.rt,

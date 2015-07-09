@@ -251,6 +251,23 @@ class Shell(cmd.Cmd):
             for line in new_search.results_as_csv(r):
                 print line
                 print >>fout, line
+    def do_match(self,args):
+        try:
+            arglist = re.split(r' +',args)
+            exp_name = arglist[0]
+            outf = arglist[1]
+        except IndexError:
+            print 'usage: match [exp_name] [outfile]'
+            return
+        ioc = self.config.get('int_over_controls')
+        ppm_diff = self.config.get('ppm_diff')
+        rt_diff = self.config.get('rt_diff')
+        attrs = self.config.get('attrs')
+        with open(outf,'wu') as fout:
+            r = new_search.match(get_engine(),exp_name,ioc,ppm_diff,rt_diff,attrs)
+            for line in new_search.results_as_csv(r):
+                print line
+                print >>fout, line
 
 if __name__=='__main__':
     engine = get_engine()
