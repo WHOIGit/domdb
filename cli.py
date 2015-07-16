@@ -249,7 +249,6 @@ class Shell(cmd.Cmd):
         with open(outf,'wu') as fout:
             r = new_search.search(get_engine(),mz,rt,ioc,ppm_diff,rt_diff,attrs)
             for line in new_search.results_as_csv(r):
-                print line
                 print >>fout, line
     def do_match(self,args):
         try:
@@ -266,7 +265,6 @@ class Shell(cmd.Cmd):
         with open(outf,'wu') as fout:
             r = new_search.match(get_engine(),exp_name,ioc,ppm_diff,rt_diff,attrs)
             for line in new_search.results_as_csv(r):
-                print line
                 print >>fout, line
 
 if __name__=='__main__':
