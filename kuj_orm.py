@@ -31,10 +31,10 @@ class Mtab(Base):
 
     id = Column(Integer, primary_key=True)
     exp_id = Column(Integer, ForeignKey('experiment.id'))
-    mz = Column(Numeric) # mass-to-charge ratio
+    mz = Column(Numeric, index=True) # mass-to-charge ratio
     mzmin = Column(Numeric)
     mzmax = Column(Numeric)
-    rt = Column(Numeric) # retention time (seconds)
+    rt = Column(Numeric, index=True) # retention time (seconds)
     rtmin = Column(Numeric)
     rtmax = Column(Numeric)
     isotopes = Column(String)
