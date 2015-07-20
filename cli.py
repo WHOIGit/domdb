@@ -226,6 +226,9 @@ class Shell(cmd.Cmd):
                 distinct().all()]
     def do_samples(self, args):
         exp_name = args
+        if not exp_name:
+            print 'Usage: samples [experiment name]'
+            return
         session = self.session_factory()
         list_samples(session,exp_name)
         session.close()
