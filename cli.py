@@ -249,7 +249,7 @@ class Shell(cmd.Cmd):
         ppm_diff = self.config.get('ppm_diff')
         rt_diff = self.config.get('rt_diff')
         attrs = self.config.get('attrs')
-        with open(outf,'wu') as fout:
+        with open(outf,'w') as fout:
             r = new_search.search(get_engine(),mz,rt,ioc,ppm_diff,rt_diff,attrs)
             for line in new_search.results_as_csv(r):
                 print >>fout, line
@@ -265,7 +265,7 @@ class Shell(cmd.Cmd):
         ppm_diff = self.config.get('ppm_diff')
         rt_diff = self.config.get('rt_diff')
         attrs = self.config.get('attrs')
-        with open(outf,'wu') as fout:
+        with open(outf,'w') as fout:
             r = new_search.match(get_engine(),exp_name,ioc,ppm_diff,rt_diff,attrs)
             for line in new_search.results_as_csv(r):
                 print >>fout, line
