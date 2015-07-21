@@ -1,39 +1,67 @@
 from engine import get_psql_engine
 from jinja2 import Environment
 
-from sql_templates import SEARCH_TEMPLATE, MATCH_TEMPLATE
+from sql_templates import SIMPLE_SEARCH_TEMPLATE, SEARCH_TEMPLATE, SIMPLE_MATCH_TEMPLATE, MATCH_TEMPLATE
 
-def construct_search(mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
-    query = Environment().from_string(SEARCH_TEMPLATE).render({
-        'attrs': attrs,
-        'ioc': ioc
-    })
-    if ioc is not None:
-        params = (mz,ppm_diff,rt,rt_diff,ioc)
-    else:
+from config import PPM_DIFF,RT_DIFF,WITH_MS2,EXCLUDE_CONTROLS,INT_OVER_CONTROLS,ATTRS
+
+def construct_search(mz,rt,config):
+    ppm_diff = config.get(PPM_DIFF)
+    rt_diff = config.get(RT_DIFF)
+    ioc = config.get(INT_OVER_CONTROLS)
+    attrs = config.get(ATTRS)
+    with_ms2 = config.get(WITH_MS2)
+    exclude_controls = config.get(EXCLUDE_CONTROLS)
+    if not exclude_controls:
+        query = Environment().from_string(SIMPLE_SEARCH_TEMPLATE).render({
+            'with_ms2': with_ms2
+        })
         params = (mz,ppm_diff,rt,rt_diff)
-    return query, params
-
-def construct_match(exp_name,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
-    query = Environment().from_string(MATCH_TEMPLATE).render({
-        'attrs': attrs,
-        'ioc': ioc
-    })
-    if ioc is not None:
-        params = (exp_name,ioc,ppm_diff,rt_diff)
     else:
-        params = (exp_name,ppm_diff,rt_diff)
+        query = Environment().from_string(SEARCH_TEMPLATE).render({
+            'attrs': attrs,
+            'ioc': ioc,
+            'with_ms2': with_ms2
+        })
+        if ioc is not None:
+            params = (mz,ppm_diff,rt,rt_diff,ioc)
+        else:
+            params = (mz,ppm_diff,rt,rt_diff)
     return query, params
 
-def search(engine,mz,rt,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
+def construct_match(exp_name,config):
+    ppm_diff = config.get(PPM_DIFF)
+    rt_diff = config.get(RT_DIFF)
+    ioc = config.get(INT_OVER_CONTROLS)
+    attrs = config.get(ATTRS)
+    with_ms2 = config.get(WITH_MS2)
+    exclude_controls = config.get(EXCLUDE_CONTROLS)
+    if not exclude_controls:
+        query = Environment().from_string(SIMPLE_MATCH_TEMPLATE).render({
+            'with_ms2': with_ms2
+        })
+        params = (exp_name,ppm_diff,rt_diff)
+    else:
+        query = Environment().from_string(MATCH_TEMPLATE).render({
+            'attrs': attrs,
+            'ioc': ioc,
+            'with_ms2': with_ms2
+        })
+        if ioc is not None:
+            params = (exp_name,ioc,ppm_diff,rt_diff)
+        else:
+            params = (exp_name,ppm_diff,rt_diff)
+    return query, params
+
+def search(engine,mz,rt,config):
     """returns ResultProxy"""
     c = engine.connect()
-    query, params = construct_search(mz,rt,ioc=ioc,ppm_diff=ppm_diff,rt_diff=rt_diff,attrs=attrs)
+    query, params = construct_search(mz,rt,config)
     return c.execute(query,*params)
 
-def match(engine,exp_name,ioc=None,ppm_diff=0.5,rt_diff=30,attrs=[]):
+def match(engine,exp_name,config):
     c = engine.connect()
-    query, params = construct_match(exp_name,ioc,ppm_diff,rt_diff,attrs)
+    query, params = construct_match(exp_name,config)
     return c.execute(query,*params)
 
 def results_as_csv(r):

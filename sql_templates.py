@@ -1,3 +1,23 @@
+# search that does not exclude controls
+# positional SQL params
+# 1. m/z ratio
+# 2. m/z ppm range
+# 3. retention time
+# 4. rt range
+# template params
+# with_ms2: T or F whether to require with_ms2 to be true
+SIMPLE_SEARCH_TEMPLATE="""
+select match_exp, match_mz, match_rt, match_annotated, "match_withMS2", sample, intensity, control, attrs
+from mtab_sample_attr msa
+where intensity > 0
+and 1e6 * abs(match_mz - %s) <= %s * match_mz
+and abs(match_rt - %s) <= %s
+{% if with_ms2 %}
+and "match_withMS2"=1
+{% endif %}
+"""
+
+# search that excludes controls
 # positional SQL params
 # 1. m/z ratio
 # 2. m/z ppm range
@@ -7,8 +27,7 @@
 # template params
 # attrs: names of sample attrs to group by (for some queries)
 # ioc: None if not using ioc but just excluding controls, some Truey value otherwise
-# FIXME: with_ms2: T or F whether to require with_ms2 to be true
-
+# with_ms2: T or F whether to require with_ms2 to be true
 SEARCH_TEMPLATE="""
 with
 q0 as (select id from metabolite m
@@ -43,6 +62,42 @@ select match_exp, match_mz, match_rt, match_annotated, "match_withMS2", sample, 
 from mtab_sample_attr msa, q3
 where msa.mtab_id=q3.mtab_id
 and msa.sample_id=q3.sample_id
+{% if with_ms2 %}
+and "match_withMS2"=1
+{% endif %}
+"""
+
+# positional SQL params
+# 1. name of experiment to match from
+# 2. m/z ppm range
+# 3. rt range
+# template params
+# with_ms2: T or F whether to require with_ms2 to be true
+SIMPLE_MATCH_TEMPLATE="""
+with
+q1 as (select mtab_id, i.sample_id
+       from intensity i, sample s
+       where s.exp_id=(select id from experiment where name=%s)
+       and i.sample_id = s.id),
+
+q2 as (select a.id, b.id as match_id
+       from metabolite a, metabolite b
+       where a.id in (select mtab_id from q1)
+       and a.id <> b.id
+       and b.id not in (select mtab_id from q1)
+       and 1e6 * abs(a.mz - b.mz) <= %s * a.mz
+       and abs(a.rt - b.rt) <= %s)
+
+-- friendly output
+select a.id, a.mz, a.rt,
+       match_exp, match_mz, match_rt, match_annotated, "match_withMS2", sample, intensity, control, attrs
+from q2, metabolite a, mtab_sample_attr b
+where q2.id=a.id
+and intensity > 0
+and q2.match_id=b.mtab_id
+{% if with_ms2 %}
+and "match_withMS2"=1
+{% endif %}
 """
 
 # positional SQL params
@@ -53,7 +108,7 @@ and msa.sample_id=q3.sample_id
 # template params
 # attrs: names of sample attrs to group by (for some queries)
 # ioc: None if not using ioc but just excluding controls, some Truey value otherwise
-
+# with_ms2: T or F whether to require with_ms2 to be true
 MATCH_TEMPLATE="""
 with
 q1 as (select mtab_id, i.sample_id, intensity, control{% for a in attrs %},
@@ -96,6 +151,9 @@ from q4, metabolite a, mtab_sample_attr b
 where q4.id=a.id
 and intensity > 0
 and q4.match_id=b.mtab_id
+{% if with_ms2 %}
+and "match_withMS2"=1
+{% endif %}
 """
 
 CREATE_VIEWS=["""

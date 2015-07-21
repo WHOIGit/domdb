@@ -245,12 +245,8 @@ class Shell(cmd.Cmd):
         except IndexError:
             print 'usage: search [mz] [rt] [outfile]'
             return
-        ioc = self.config.get('int_over_controls')
-        ppm_diff = self.config.get('ppm_diff')
-        rt_diff = self.config.get('rt_diff')
-        attrs = self.config.get('attrs')
         with open(outf,'w') as fout:
-            r = new_search.search(get_engine(),mz,rt,ioc,ppm_diff,rt_diff,attrs)
+            r = new_search.search(get_engine(),mz,rt,self.config)
             for line in new_search.results_as_csv(r):
                 print >>fout, line
     def do_match(self,args):
@@ -261,12 +257,8 @@ class Shell(cmd.Cmd):
         except IndexError:
             print 'usage: match [exp_name] [outfile]'
             return
-        ioc = self.config.get('int_over_controls')
-        ppm_diff = self.config.get('ppm_diff')
-        rt_diff = self.config.get('rt_diff')
-        attrs = self.config.get('attrs')
         with open(outf,'w') as fout:
-            r = new_search.match(get_engine(),exp_name,ioc,ppm_diff,rt_diff,attrs)
+            r = new_search.match(get_engine(),exp_name,self.config)
             for line in new_search.results_as_csv(r):
                 print >>fout, line
 

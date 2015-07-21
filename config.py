@@ -2,6 +2,13 @@ import re
 import os
 import json
 
+PPM_DIFF='ppm_diff'
+RT_DIFF='rt_diff'
+WITH_MS2='with_ms2'
+EXCLUDE_CONTROLS='exclude_controls'
+INT_OVER_CONTROLS='int_over_controls'
+ATTRS='attrs'
+
 def get_default_config():
     return dict(
         ppm_diff = 0.5,
