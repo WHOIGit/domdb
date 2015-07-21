@@ -7,13 +7,18 @@
 # template params
 # attrs: names of sample attrs to group by (for some queries)
 # ioc: None if not using ioc but just excluding controls, some Truey value otherwise
+# FIXME: with_ms2: T or F whether to require with_ms2 to be true
 
 SEARCH_TEMPLATE="""
 with
+q0 as (select id from metabolite m
+       where 1e6 * abs(m.mz - %s) <= %s * m.mz
+       and abs(m.rt - %s) <= %s),
+
 q1 as (select mtab_id, i.sample_id, intensity, control{% for a in attrs %},
              (select value from sample_attr sa where sa.sample_id=i.sample_id and sa.name='{{a}}') as attr_{{a}}{% endfor %}
-       from intensity i, sample s
-       where i.sample_id = s.id),
+       from intensity i, sample s, q0
+       where mtab_id=q0.id and i.sample_id = s.id),
 
 q2 as (select mtab_id{% for a in attrs %}, attr_{{a}}{% endfor %}, avg(intensity) as iic
        from q1
@@ -22,10 +27,7 @@ q2 as (select mtab_id{% for a in attrs %}, attr_{{a}}{% endfor %}, avg(intensity
 
 q3 as (select mtab_id, sample_id
        from q1
-       where mtab_id in (select id from metabolite m
-                         where 1e6 * abs(m.mz - %s) <= %s * m.mz
-                         and abs(m.rt - %s) <= %s)
-       and control=0
+       where control=0
 {% if ioc %}
        and intensity > %s * (select iic from q2 where q1.mtab_id=q2.mtab_id{% for a in attrs %}
                              and q1.attr_{{a}} is not distinct from q2.attr_{{a}}{% endfor %})
