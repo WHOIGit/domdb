@@ -94,6 +94,7 @@ select a.id, a.mz, a.rt,
        match_exp, match_mz, match_rt, match_annotated, "match_withMS2", sample, intensity, control, attrs
 from q4, metabolite a, mtab_sample_attr b
 where q4.id=a.id
+and intensity > 0
 and q4.match_id=b.mtab_id
 """
 
