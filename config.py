@@ -15,6 +15,15 @@ def get_default_config():
 def str2bool(s):
     return s in ['True','true','T','t','1','Yes','yes','Y','y']
 
+def str2float_wnone(s):
+    try:
+        return float(s)
+    except:
+        if s in ['none','None']:
+            return None
+        else:
+            raise
+
 def attrs2list(s):
     return re.split(r', *',s)
 
@@ -23,7 +32,7 @@ CONFIG_CASTS = dict(
     rt_diff=int,
     with_ms2=str2bool,
     exclude_controls=str2bool,
-    int_over_controls=float,
+    int_over_controls=str2float_wnone,
     attrs=attrs2list
 )
 
