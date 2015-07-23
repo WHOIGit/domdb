@@ -192,12 +192,14 @@ class Shell(cmd.Cmd):
             return self._complete_attr(text)
         return complete_config_key(self.config, text)
     def _print_config(self):
-        def massage(value):
+        def massage(key,value):
+            if key == 'attrs' and not value:
+                return '(any)'
             try:
                 return ','.join(value)
             except:
                 return value
-        ds = [dict(var=k,value=massage(v)) for k,v in sorted(self.config.items())]
+        ds = [dict(var=k,value=massage(k,v)) for k,v in sorted(self.config.items())]
         for line in asciitable(ds,disp_cols=['var','value']):
             print line
     def do_set(self,args):
