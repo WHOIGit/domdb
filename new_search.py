@@ -5,7 +5,7 @@ from sql_templates import SIMPLE_SEARCH_TEMPLATE, SEARCH_TEMPLATE, SIMPLE_MATCH_
 
 from config import PPM_DIFF,RT_DIFF,WITH_MS2,EXCLUDE_CONTROLS,INT_OVER_CONTROLS,ATTRS
 
-def construct_search(mz,rt,config):
+def construct_search(mz,rt,ion_mode,config):
     ppm_diff = config.get(PPM_DIFF)
     rt_diff = config.get(RT_DIFF)
     ioc = config.get(INT_OVER_CONTROLS)
@@ -16,7 +16,7 @@ def construct_search(mz,rt,config):
         query = Environment().from_string(SIMPLE_SEARCH_TEMPLATE).render({
             'with_ms2': with_ms2
         })
-        params = (mz,ppm_diff,rt,rt_diff)
+        params = (ion_mode,mz,ppm_diff,rt,rt_diff)
     else:
         query = Environment().from_string(SEARCH_TEMPLATE).render({
             'attrs': attrs,
@@ -24,12 +24,12 @@ def construct_search(mz,rt,config):
             'with_ms2': with_ms2
         })
         if ioc is not None:
-            params = (mz,ppm_diff,rt,rt_diff,ioc)
+            params = (ion_mode,mz,ppm_diff,rt,rt_diff,ioc)
         else:
-            params = (mz,ppm_diff,rt,rt_diff)
+            params = (ion_mode,mz,ppm_diff,rt,rt_diff)
     return query, params
 
-def construct_match(exp_name,config):
+def construct_match(exp_name,ion_mode,config):
     ppm_diff = config.get(PPM_DIFF)
     rt_diff = config.get(RT_DIFF)
     ioc = config.get(INT_OVER_CONTROLS)
@@ -40,7 +40,7 @@ def construct_match(exp_name,config):
         query = Environment().from_string(SIMPLE_MATCH_TEMPLATE).render({
             'with_ms2': with_ms2
         })
-        params = (exp_name,ppm_diff,rt_diff)
+        params = (ion_mode,exp_name,ion_mode,ppm_diff,rt_diff)
     else:
         query = Environment().from_string(MATCH_TEMPLATE).render({
             'attrs': attrs,
@@ -48,20 +48,20 @@ def construct_match(exp_name,config):
             'with_ms2': with_ms2
         })
         if ioc is not None:
-            params = (exp_name,ioc,ppm_diff,rt_diff)
+            params = (ion_mode,exp_name,ioc,ion_mode,ppm_diff,rt_diff)
         else:
-            params = (exp_name,ppm_diff,rt_diff)
+            params = (ion_mode,exp_name,ion_mode,ppm_diff,rt_diff)
     return query, params
 
-def search(engine,mz,rt,config):
+def search(engine,mz,rt,ion_mode,config):
     """returns ResultProxy"""
     c = engine.connect()
-    query, params = construct_search(mz,rt,config)
+    query, params = construct_search(mz,rt,ion_mode,config)
     return c.execute(query,*params)
 
-def match(engine,exp_name,config):
+def match(engine,exp_name,ion_mode,config):
     c = engine.connect()
-    query, params = construct_match(exp_name,config)
+    query, params = construct_match(exp_name,ion_mode,config)
     return c.execute(query,*params)
 
 def results_as_csv(r):

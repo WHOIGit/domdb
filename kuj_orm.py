@@ -23,6 +23,7 @@ class Exp(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
+    ion_mode = Column(String)
 
     # backref to samples
 
@@ -106,12 +107,12 @@ IGNORE='ignore'
 CONTROL='control'
 FILE_NAME='File.Name'
 
-def etl(session, exp_name, df_path, mdf_path, log=None):
+def etl(session, exp_name, df_path, mdf_path, ion_mode, log=None):
     if not log: # log progress
         log = lambda x: None
-    exp = session.query(Exp).filter(Exp.name==exp_name).first()
+    exp = session.query(Exp).filter(Exp.name==exp_name).filter(Exp.ion_mode==ion_mode).first()
     if exp is None:
-        exp = Exp(name=exp_name)
+        exp = Exp(name=exp_name,ion_mode=ion_mode)
         session.add(exp)
     else:
         log("experiment %s has already been added to database, use 'remove %s' to remove it" % (exp_name, exp_name))
@@ -208,12 +209,13 @@ def withms2_min(config):
         return 0
 
 class Db(object):
-    def __init__(self, session, config=default_config()):
+    def __init__(self, session, ion_mode, config=default_config()):
         self.session = session
+        self.ion_mode = ion_mode
         self.config = config
     def remove_exp(self,exp):
         # http://stackoverflow.com/questions/19243964/python-sql-alchemy-cascade-delete
-        theExp = self.session.query(Exp).filter(Exp.name==exp).first()
+        theExp = self.session.query(Exp).filter(Exp.ion_mode==self.ion_mode).filter(Exp.name==exp).first()
         self.session.delete(theExp)
         self.session.commit()
     def all_attrs(self,exp=None):
@@ -228,7 +230,7 @@ class Db(object):
                 aa[k] += [v]
         return aa
     def mtab_count(self,exp=None):
-        q = self.session.query(func.count(Mtab.id))
+        q = self.session.query(func.count(Mtab.id)).filter(Mtab.exp.has(ion_mode=self.ion_mode))
         if exp is not None:
             q = q.filter(Mtab.exp.has(name=exp))
         return q.first()[0]
@@ -366,10 +368,10 @@ class Db(object):
         return pdf
 
 @contextmanager
-def DomDb(sessionfactory,config=default_config()):
+def DomDb(sessionfactory,ion_mode,config=default_config()):
     try:
         session = sessionfactory()
-        yield Db(session, config)
+        yield Db(session, ion_mode, config)
     except:
         print 'Error running command:'
         traceback.print_exc(file=sys.stdout)

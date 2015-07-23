@@ -37,11 +37,11 @@ def get_session_factory():
     Session.configure(bind=engine)
     return Session
 
-def list_exps(session):
+def list_exps(session,ion_mode):
     # list experiments, and stats about them
     def q():
         # for all experiments
-        for exp in session.query(Exp).all():
+        for exp in session.query(Exp).filter(Exp.ion_mode==ion_mode).all():
             n_samples = len(exp.samples) # count the samples
             # count the metabolites
             n_mtabs = session.query(func.count(Mtab.id)).filter(Mtab.exp==exp).first()[0]
@@ -55,10 +55,14 @@ def list_exps(session):
     for line in asciitable(list(q()),['name','samples','metabolites'],'Database is empty'):
         print line
 
-def list_samples(session,exp_name):
+def list_samples(session,exp_name,ion_mode):
     cols = ['name','control']
     rows = []
-    for sample in session.query(Exp).filter(Exp.name==exp_name).first().samples:
+    exp = session.query(Exp).filter(Exp.name==exp_name).filter(Exp.ion_mode==ion_mode).first()
+    if exp is None:
+        print 'No such experiment %s' % exp_name
+        return
+    for sample in exp.samples:
         d = { 'name': sample.name,
               'control': sample.control }
         for a in sorted(sample.attrs,key=lambda a:a.name):
@@ -95,14 +99,15 @@ def list_exp_files(dir):
                 }
 
 class Shell(cmd.Cmd):
-    def __init__(self,session_factory):
+    def __init__(self,session_factory,ion_mode):
         cmd.Cmd.__init__(self)
         self.prompt = 'domdb> '
         self.session_factory = session_factory
         self.config = initialize_config()
+        self.ion_mode = ion_mode
         self.do_count('')
     def do_count(self,args):
-        with DomDb(self.session_factory, self.config) as domdb:
+        with DomDb(self.session_factory, self.ion_mode, self.config) as domdb:
             if not args:
                 n = domdb.mtab_count()
                 print '%d metabolites in database' % n
@@ -112,7 +117,7 @@ class Shell(cmd.Cmd):
                 print '%d metabolites in experiment %s' % (n, exp)
     def do_list(self,args):
         session = self.session_factory()
-        list_exps(session)
+        list_exps(session, self.ion_mode)
         session.close()
     def do_dir(self, args):
         dir = args
@@ -126,7 +131,7 @@ class Shell(cmd.Cmd):
         dir = args
         result = list(list_exp_files(dir))
         print 'found files for %d experiments in %s' % (len(result), dir)
-        with DomDb(self.session_factory, self.config) as domdb:
+        with DomDb(self.session_factory, self.ion_mode, self.config) as domdb:
             for d in result:
                 name = d['name']
                 path = os.path.join(dir,d['data'])
@@ -134,8 +139,8 @@ class Shell(cmd.Cmd):
                 print 'loading experiment %s from:' % name
                 print '- data file %s' % path
                 print '- metadata file %s' % mdpath
-                etl(domdb.session,name,path,mdpath,log=console_log)
-                n = domdb.session.query(func.count(Mtab.id)).first()[0]
+                etl(domdb.session,name,path,mdpath,self.ion_mode,log=console_log)
+                n = domdb.mtab_count(self.ion_mode)
                 print '%d metabolites in database' % n
     def complete_add_dir(self, text, line, start_idx, end_idx):
         return complete_path(text, line)
@@ -155,15 +160,16 @@ class Shell(cmd.Cmd):
         print 'data file %s' % path
         print 'metadata file %s' % mdpath
         session = self.session_factory()
-        etl(session,exp,path,mdpath,log=console_log)
-        n = session.query(func.count(Mtab.id)).first()[0]
-        print '%d metabolites in database' % n
+        etl(session,exp,path,mdpath,self.ion_mode,log=console_log)
         session.close()
+        with DomDb(self.session_factory, self.ion_mode, self.config) as domdb:
+            n = domdb.mtab_count()
+        print '%d metabolites in database' % n
     def complete_add(self, text, line, start_idx, end_idx):
         return complete_path(text, line)
     def complete_remove(self, text, line, start_idx, end_idx):
         session = self.session_factory()
-        exps = session.query(Exp).filter(Exp.name.like(text+'%')).all()
+        exps = session.query(Exp).filter(Exp.ion_mode==self.ion_mode).filter(Exp.name.like(text+'%')).all()
         return [e.name for e in exps]
     def do_remove(self,args):
         try:
@@ -172,7 +178,7 @@ class Shell(cmd.Cmd):
             print 'ERROR: remove takes [exp name]'
             return
         print 'Removing all %s data ...' % exp
-        with DomDb(self.session_factory, self.config) as domdb:
+        with DomDb(self.session_factory, self.ion_mode, self.config) as domdb:
             domdb.remove_exp(exp)
         self.do_list('')
     def _complete_attr(self, text):
@@ -221,6 +227,7 @@ class Shell(cmd.Cmd):
     def complete_samples(self, text, line, start_idx, end_idx):
         session = self.session_factory()
         return [r[0] for r in session.query(Exp.name).\
+                filter(Exp.ion_mode==self.ion_mode).\
                 filter(Exp.name.like(text+'%')).\
                 order_by(Exp.name).\
                 distinct().all()]
@@ -230,7 +237,7 @@ class Shell(cmd.Cmd):
             print 'Usage: samples [experiment name]'
             return
         session = self.session_factory()
-        list_samples(session,exp_name)
+        list_samples(session,exp_name,self.ion_mode)
         session.close()
     def do_exit(self,args):
         sys.exit(0)
@@ -246,7 +253,7 @@ class Shell(cmd.Cmd):
             print 'usage: search [mz] [rt] [outfile]'
             return
         with open(outf,'w') as fout:
-            r = new_search.search(get_engine(),mz,rt,self.config)
+            r = new_search.search(get_engine(),mz,rt,self.ion_mode,self.config)
             for line in new_search.results_as_csv(r):
                 print >>fout, line
     def do_match(self,args):
@@ -258,12 +265,23 @@ class Shell(cmd.Cmd):
             print 'usage: match [exp_name] [outfile]'
             return
         with open(outf,'w') as fout:
-            r = new_search.match(get_engine(),exp_name,self.config)
+            r = new_search.match(get_engine(),exp_name,self.ion_mode,self.config)
             for line in new_search.results_as_csv(r):
                 print >>fout, line
+
+def get_ion_mode(s):
+    if s in ['neg','pos']:
+        return s
+    else:
+        raise ValueError('ion mode must be "neg" or "pos"')
 
 if __name__=='__main__':
     engine = get_engine()
     initialize_schema(engine)
-    shell = Shell(get_session_factory())
+    try:
+        ion_mode = get_ion_mode(sys.argv[1])
+    except IndexError:
+        print 'Usage: python cli.py [ion mode: either "neg" or "pos"]'
+        sys.exit(-1)
+    shell = Shell(get_session_factory(),ion_mode)
     shell.cmdloop('DOMDB v1')

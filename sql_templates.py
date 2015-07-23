@@ -1,15 +1,17 @@
 # search that does not exclude controls
 # positional SQL params
-# 1. m/z ratio
-# 2. m/z ppm range
-# 3. retention time
-# 4. rt range
+# 1. ion mode
+# 2. m/z ratio
+# 3. m/z ppm range
+# 4. retention time
+# 5. rt range
 # template params
 # with_ms2: T or F whether to require with_ms2 to be true
 SIMPLE_SEARCH_TEMPLATE="""
 select match_exp, match_mz, match_rt, match_annotated, "match_withMS2", sample, intensity, control, attrs
 from mtab_sample_attr msa
 where intensity > 0
+and ion_mode = %s
 and 1e6 * abs(match_mz - %s) <= %s * match_mz
 and abs(match_rt - %s) <= %s
 {% if with_ms2 %}
@@ -19,19 +21,21 @@ and "match_withMS2"=1
 
 # search that excludes controls
 # positional SQL params
-# 1. m/z ratio
-# 2. m/z ppm range
-# 3. retention time
-# 4. rt range
-# 5. intensity over controls (for some queries)
+# 1. ion mode
+# 2. m/z ratio
+# 3. m/z ppm range
+# 4. retention time
+# 5. rt range
+# 6. intensity over controls (for some queries)
 # template params
 # attrs: names of sample attrs to group by (for some queries)
 # ioc: None if not using ioc but just excluding controls, some Truey value otherwise
 # with_ms2: T or F whether to require with_ms2 to be true
 SEARCH_TEMPLATE="""
 with
-q0 as (select id from metabolite m
-       where 1e6 * abs(m.mz - %s) <= %s * m.mz
+q0 as (select m.id from metabolite m, experiment e
+       where e.id=m.exp_id and e.ion_mode=%s
+       and 1e6 * abs(m.mz - %s) <= %s * m.mz
        and abs(m.rt - %s) <= %s),
 
 q1 as (select mtab_id, i.sample_id, intensity, control{% for a in attrs %},
@@ -68,22 +72,25 @@ and "match_withMS2"=1
 """
 
 # positional SQL params
-# 1. name of experiment to match from
-# 2. m/z ppm range
-# 3. rt range
+# 1. ion mode
+# 2. name of experiment to match from
+# 3. ion mode
+# 4. m/z ppm range
+# 5. rt range
 # template params
 # with_ms2: T or F whether to require with_ms2 to be true
 SIMPLE_MATCH_TEMPLATE="""
 with
 q1 as (select mtab_id, i.sample_id
        from intensity i, sample s
-       where s.exp_id=(select id from experiment where name=%s)
+       where s.exp_id=(select id from experiment where ion_mode=%s and name=%s)
        and i.sample_id = s.id),
 
 q2 as (select a.id, b.id as match_id
-       from metabolite a, metabolite b
+       from metabolite a, metabolite b, experiment e
        where a.id in (select mtab_id from q1)
        and a.id <> b.id
+       and e.id=b.exp_id and e.ion_mode=%s
        and b.id not in (select mtab_id from q1)
        and 1e6 * abs(a.mz - b.mz) <= %s * a.mz
        and abs(a.rt - b.rt) <= %s)
@@ -101,10 +108,12 @@ and "match_withMS2"=1
 """
 
 # positional SQL params
-# 1. name of experiment to match from
-# 2. (optional) ioc
-# 3. m/z ppm range
-# 4. rt range
+# 1. ion mode
+# 2. name of experiment to match from
+# 3. (optional) ioc
+# 4. ion mode
+# 5. m/z ppm range
+# 6. rt range
 # template params
 # attrs: names of sample attrs to group by (for some queries)
 # ioc: None if not using ioc but just excluding controls, some Truey value otherwise
@@ -114,7 +123,7 @@ with
 q1 as (select mtab_id, i.sample_id, intensity, control{% for a in attrs %},
              (select value from sample_attr sa where sa.sample_id=i.sample_id and sa.name='{{a}}') as attr_{{a}}{% endfor %}
        from intensity i, sample s
-       where s.exp_id=(select id from experiment where name=%s)
+       where s.exp_id=(select id from experiment where ion_mode=%s and name=%s)
        and i.sample_id = s.id),
 
 q2 as (select mtab_id{% for a in attrs %}, attr_{{a}}{% endfor %}, avg(intensity) as iic
@@ -137,9 +146,10 @@ q3 as (select mtab_id
        having count(*) > 0),
 
 q4 as (select a.id, b.id as match_id
-       from metabolite a, metabolite b
+       from metabolite a, metabolite b, experiment e
        where a.id in (select mtab_id from q3)
        and a.id <> b.id
+       and e.id=b.exp_id and e.ion_mode=%s
        and b.id not in (select mtab_id from q3)
        and 1e6 * abs(a.mz - b.mz) <= %s * a.mz
        and abs(a.rt - b.rt) <= %s)
@@ -161,6 +171,7 @@ create or replace view mtab_sample_attr
 as
 select m.id as mtab_id, s.id as sample_id,
        e.name as match_exp,
+       e.ion_mode,
        m.mz as match_mz, m.rt as match_rt, m.annotated as match_annotated, m."withMS2" as "match_withMS2",
        s.name as sample,
        intensity,
