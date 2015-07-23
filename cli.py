@@ -191,7 +191,7 @@ class Shell(cmd.Cmd):
         if re.match(r'.*attrs.*',line):
             return self._complete_attr(text)
         return complete_config_key(self.config, text)
-    def _print_config(self):
+    def _render_config(self):
         def massage(key,value):
             if key == 'attrs' and not value:
                 return '(any)'
@@ -200,6 +200,9 @@ class Shell(cmd.Cmd):
             except:
                 return value
         ds = [dict(var=k,value=massage(k,v)) for k,v in sorted(self.config.items())]
+        return ds
+    def _print_config(self):
+        ds = self._render_config()
         for line in asciitable(ds,disp_cols=['var','value']):
             print line
     def do_set(self,args):
@@ -245,6 +248,10 @@ class Shell(cmd.Cmd):
         sys.exit(0)
     def do_quit(self,args):
         sys.exit(0)
+    def _dump_config(self):
+        yield '"# ion_mode=%s"' % self.ion_mode
+        for d in self._render_config():
+            yield '"# %s=%s"' % (d['var'], str(d['value']))
     def do_search(self,args):
         try:
             arglist = re.split(r' +',args)
@@ -256,6 +263,8 @@ class Shell(cmd.Cmd):
             return
         with open(outf,'w') as fout:
             r = new_search.search(get_engine(),mz,rt,self.ion_mode,self.config)
+            for line in self._dump_config():
+                print >>fout, line
             for line in new_search.results_as_csv(r):
                 print >>fout, line
     def do_match(self,args):
@@ -268,6 +277,8 @@ class Shell(cmd.Cmd):
             return
         with open(outf,'w') as fout:
             r = new_search.match(get_engine(),exp_name,self.ion_mode,self.config)
+            for line in self._dump_config():
+                print >>fout, line
             for line in new_search.results_as_csv(r):
                 print >>fout, line
 
