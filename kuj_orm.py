@@ -221,6 +221,7 @@ class Db(object):
     def all_attrs(self,exp=None):
         aa = {}
         for row in self.session.query(SampleAttr.name, SampleAttr.value).\
+            join(Sample).join(Exp).filter(Exp.ion_mode==self.ion_mode).\
             order_by(SampleAttr.name, SampleAttr.value).\
             distinct():
             k, v = row

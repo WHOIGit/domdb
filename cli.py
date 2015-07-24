@@ -66,6 +66,8 @@ def list_samples(session,exp_name,ion_mode):
         d = { 'name': sample.name,
               'control': sample.control }
         for a in sorted(sample.attrs,key=lambda a:a.name):
+            if a.name=='ignore':
+                continue
             if a.name not in cols:
                 cols.append(a.name)
             d[a.name] = a.value
@@ -244,6 +246,15 @@ class Shell(cmd.Cmd):
         session = self.session_factory()
         list_samples(session,exp_name,self.ion_mode)
         session.close()
+    def do_list_attrs(self,args):
+        with DomDb(self.session_factory, self.ion_mode, self.config) as domdb:
+            aa = domdb.all_attrs()
+            def table():
+                for k,v in aa.items():
+                    if k not in ['ignore']:
+                        yield {'name':k, 'values': ','.join(v)}
+            for line in asciitable(table(),disp_cols=['name','values']):
+                print line
     def do_exit(self,args):
         sys.exit(0)
     def do_quit(self,args):
