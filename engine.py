@@ -4,7 +4,7 @@ import sqlalchemy
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-PSQL_URL='postgresql://domdb:domdb@localhost/domdb'
+from db import DATABASE_URL
 
 def get_sqlite_engine(delete=True):
     # first, toast db
@@ -18,4 +18,4 @@ def get_sqlite_engine(delete=True):
     return sqlalchemy.create_engine('sqlite:///%s' % DB_FILE)
 
 def get_psql_engine():
-    return sqlalchemy.create_engine(PSQL_URL)
+    return sqlalchemy.create_engine(DATABASE_URL)

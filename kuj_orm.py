@@ -5,11 +5,14 @@ import json
 from contextlib import contextmanager
 import traceback
 
+from sql_templates import CREATE_VIEWS
+
 import sqlalchemy
 from sqlalchemy.sql.functions import coalesce
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean, ForeignKey, Numeric
 from sqlalchemy import func, and_, distinct, select
+from sqlalchemy.schema import DDL
 from sqlalchemy.orm import sessionmaker, relationship, backref, aliased, column_property
 from sqlalchemy.types import PickleType
 
@@ -20,6 +23,7 @@ class Exp(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
+    ion_mode = Column(String)
 
     # backref to samples
 
@@ -28,10 +32,10 @@ class Mtab(Base):
 
     id = Column(Integer, primary_key=True)
     exp_id = Column(Integer, ForeignKey('experiment.id'))
-    mz = Column(Numeric) # mass-to-charge ratio
+    mz = Column(Numeric, index=True) # mass-to-charge ratio
     mzmin = Column(Numeric)
     mzmax = Column(Numeric)
-    rt = Column(Numeric) # retention time (seconds)
+    rt = Column(Numeric, index=True) # retention time (seconds)
     rtmin = Column(Numeric)
     rtmax = Column(Numeric)
     isotopes = Column(String)
@@ -39,9 +43,6 @@ class Mtab(Base):
     pcgroup = Column(Integer)
     withMS2 = Column(Integer, default=0)
     annotated = Column(String, default='')
-
-    avg_int_controls = Column(Numeric,default=0)
-    avg_int_samples = Column(Numeric,default=0)
 
     exp = relationship(Exp, backref=backref('mtabs', cascade='all,delete-orphan'))
 
@@ -83,26 +84,11 @@ class MtabIntensity(Base):
     sample = relationship(Sample, backref=backref('intensities', cascade='all,delete-orphan'))
     mtab = relationship(Mtab, backref=backref('intensities', cascade='all,delete-orphan'))
 
-# the following two implementations are for reference;
-# they are slow and so are precomputed during etl instead
-"""
-# "average intensity in controls" attribute of Mtab
-Mtab.avg_int_controls = column_property(
-    select([coalesce(func.avg(MtabIntensity.intensity),0)],\
-           and_(
-               MtabIntensity.mtab_id==Mtab.id,
-               Sample.id==MtabIntensity.sample_id,
-               Sample.control==1
-           )))
-# "average intensity in samples" attribute of Mtab
-Mtab.avg_int_samples = column_property(
-    select([coalesce(func.avg(MtabIntensity.intensity),0)],\
-           and_(
-               MtabIntensity.mtab_id==Mtab.id,
-               Sample.id==MtabIntensity.sample_id,
-               Sample.control==0
-           )))
-"""
+def initialize_schema(engine):
+    Base.metadata.create_all(engine)
+    c = engine.connect()
+    for cv in CREATE_VIEWS:
+        c.execute(DDL(cv))
 
 COMMON_FIELDS=set([
     'mz',
@@ -121,12 +107,12 @@ IGNORE='ignore'
 CONTROL='control'
 FILE_NAME='File.Name'
 
-def etl(session, exp_name, df_path, mdf_path, log=None):
+def etl(session, exp_name, df_path, mdf_path, ion_mode, log=None):
     if not log: # log progress
         log = lambda x: None
-    exp = session.query(Exp).filter(Exp.name==exp_name).first()
+    exp = session.query(Exp).filter(Exp.name==exp_name).filter(Exp.ion_mode==ion_mode).first()
     if exp is None:
-        exp = Exp(name=exp_name)
+        exp = Exp(name=exp_name,ion_mode=ion_mode)
         session.add(exp)
     else:
         log("experiment %s has already been added to database, use 'remove %s' to remove it" % (exp_name, exp_name))
@@ -167,9 +153,6 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
             m = Mtab(**md)
             # now record mtab intensity per sample
             rest = dict((k,d[k]) for k in rest_keys if k)
-            # record average intensities for control / non-control ("sample") samples
-            control_ints = []
-            sample_ints = []
             n_samples = 0
             for cn,s in rest.items():
                 if cn in samples:
@@ -179,21 +162,11 @@ def etl(session, exp_name, df_path, mdf_path, log=None):
                     mi = MtabIntensity(mtab=m, sample=sample, intensity=intensity)
                     # FIXME use association proxy
                     session.add(mi)
-                    # accumulate avgs
-                    if sample.control==1:
-                        control_ints.append(intensity)
-                    else:
-                        sample_ints.append(intensity)
             if n_samples == 0:
                 log('ERROR: all samples missing from metabolite record, wrong metadata file?')
                 log('metabolite record columns (in no particular order): %s' % keys)
                 session.rollback()
                 return
-            # compute average intensities across control / non-control ("sample")
-            if control_ints:
-                m.avg_int_controls = sum(control_ints) / float(len(control_ints))
-            if sample_ints:
-                m.avg_int_samples = sum(sample_ints) / float(len(sample_ints))
             # add to session
             session.add(m)
             n += 1
@@ -226,7 +199,7 @@ def default_config():
         WITH_MS2: False,
         EXCLUDE_CONTROLS: True,
         INT_OVER_CONTROLS: 0,
-        EXCLUDE_ATTRS: {}
+        EXCLUDE_ATTRS: set()
     }
 
 def withms2_min(config):
@@ -236,20 +209,19 @@ def withms2_min(config):
         return 0
 
 class Db(object):
-    def __init__(self, session, config=default_config()):
+    def __init__(self, session, ion_mode, config=default_config()):
         self.session = session
+        self.ion_mode = ion_mode
         self.config = config
     def remove_exp(self,exp):
-        # FIXME cascading ORM delete should make this unnecessary
-        self.session.query(Mtab).filter(Mtab.exp.has(name=exp)).delete(synchronize_session='fetch')
-        self.session.commit()
-        self.session.query(Sample).filter(Sample.exp.has(name=exp)).delete(synchronize_session='fetch')
-        self.session.commit()
-        self.session.query(Exp).filter(Exp.name==exp).delete(synchronize_session='fetch')
+        # http://stackoverflow.com/questions/19243964/python-sql-alchemy-cascade-delete
+        theExp = self.session.query(Exp).filter(Exp.ion_mode==self.ion_mode).filter(Exp.name==exp).first()
+        self.session.delete(theExp)
         self.session.commit()
     def all_attrs(self,exp=None):
         aa = {}
         for row in self.session.query(SampleAttr.name, SampleAttr.value).\
+            join(Sample).join(Exp).filter(Exp.ion_mode==self.ion_mode).\
             order_by(SampleAttr.name, SampleAttr.value).\
             distinct():
             k, v = row
@@ -259,7 +231,7 @@ class Db(object):
                 aa[k] += [v]
         return aa
     def mtab_count(self,exp=None):
-        q = self.session.query(func.count(Mtab.id))
+        q = self.session.query(func.count(Mtab.id)).filter(Mtab.exp.has(ion_mode=self.ion_mode))
         if exp is not None:
             q = q.filter(Mtab.exp.has(name=exp))
         return q.first()[0]
@@ -397,10 +369,10 @@ class Db(object):
         return pdf
 
 @contextmanager
-def DomDb(sessionfactory,config=default_config()):
+def DomDb(sessionfactory,ion_mode,config=default_config()):
     try:
         session = sessionfactory()
-        yield Db(session, config)
+        yield Db(session, ion_mode, config)
     except:
         print 'Error running command:'
         traceback.print_exc(file=sys.stdout)
