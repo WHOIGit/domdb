@@ -75,7 +75,7 @@ def results_as_csv(r):
     for row in rows:
         for kv in dict(row.items()).get('attrs'):
             k, v = kv.split('=')
-            if k not in attrs:
+            if k not in attrs and k != 'ignore':
                 attrs += [k]
     cols += attrs
     yield ','.join(cols)
