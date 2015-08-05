@@ -7,4 +7,4 @@ The database organizes LC-MS data and metadata to allow efficient querying of da
 
 The manuscript is available here: http://dx.doi.org/10.1016/j.marchem.2015.06.012. 
 
-The wiki at describes how to use the software.
+The wiki describes how to install and use the software.
